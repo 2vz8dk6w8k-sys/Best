@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>АвтоСервис · Записи</title>
+<link rel="apple-touch-icon" href="data:image/png;base64,">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+<!-- Firebase (бесплатная общая база данных) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+  html, body { margin:0; padding:0; background:#EEF1ED; }
+  .font-display { font-family: 'Space Grotesk', sans-serif; }
+  .font-body { font-family: 'Inter', sans-serif; }
+  .font-mono { font-family: 'IBM Plex Mono', monospace; }
+  .ticket { position: relative; }
+  .ticket::before, .ticket::after {
+    content: '';
+    position: absolute;
+    left: -9px;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: #EEF1ED;
+    z-index: 2;
+  }
+  .ticket::before { top: -9px; }
+  .ticket::after { bottom: -9px; }
+  .input {
+    width: 100%;
+    background: #fff;
+    border: 1px solid #D8DDD6;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+  }
+  .input:focus { border-color: #14555A; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!--
+  ====================== НАСТРОЙКА (сделай один раз) ======================
+  1. Зайди на https://console.firebase.google.com
+  2. Создай проект (бесплатно, "Spark" план).
+  3. В проекте: Build → Firestore Database → Create database → Start in test mode.
+  4. В проекте: Project settings (шестерёнка) → General → в разделе "Your apps"
+     нажми "</>" (Web app), дай имя, скопируй объект firebaseConfig.
+  5. Вставь его вместо firebaseConfig ниже.
+  ===========================================================================
+-->
+<script>
+  const firebaseConfig = {
+    // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBwO2PLqtOTRyPfLbO-i0GAKcmFR-XJajU",
+  authDomain: "best-f0032.firebaseapp.com",
+  projectId: "best-f0032",
+  storageBucket: "best-f0032.firebasestorage.app",
+  messagingSenderId: "1014090691525",
+  appId: "1:1014090691525:web:79d19904e7fd8402df91ac"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const docRef = db.collection("garage").doc("shared-data");
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef } = React;
+const {
+  Plus, X, Phone, Car, Wrench, Search, Clock, User, Check, Calendar: CalIcon, History
+} = lucide;
+
+const STATUS = {
+  planned:  { label: "Запланировано", color: "#E2900A", bg: "#FDF3E1" },
+  progress: { label: "В работе",      color: "#14555A", bg: "#E4EEEE" },
+  done:     { label: "Готово",        color: "#4C7A5E", bg: "#E9F1EA" },
+  cancelled:{ label: "Отменено",      color: "#9AA39C", bg: "#F0F1EE" },
+};
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const fmtDateLabel = (d) => {
+  const dt = new Date(d + "T00:00:00");
+  return dt.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "short" });
+};
+const loadDefault = () => ({ bookings: [], masters: ["Иван", "Сергей", "Алексей"] });
+
+function App() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [connErr, setConnErr] = useState(false);
+  const [view, setView] = useState("calendar");
+  const [selectedDate, setSelectedDate] = useState(todayStr());
+  const [showForm, setShowForm] = useState(false);
+  const [editBooking, setEditBooking] = useState(null);
+  const [search, setSearch] = useState("");
+  const [openClientKey, setOpenClientKey] = useState(null);
+  const saveTimer = useRef(null);
+  const skipNextSnapshot = useRef(false);
+
+  // Realtime sync from Firestore — все сотрудники видят изменения друг друга
+  useEffect(() => {
+    const unsub = docRef.onSnapshot(
+      (snap) => {
+        if (skipNextSnapshot.current) { skipNextSnapshot.current = false; return; }
+        if (snap.exists) {
+          setData(snap.data().payload ? JSON.parse(snap.data().payload) : loadDefault());
+        } else {
+          setData(loadDefault());
+        }
+        setLoading(false);
+        setConnErr(false);
+      },
+      (err) => { console.error(err); setConnErr(true); setLoading(false); setData(loadDefault()); }
+    );
+    return () => unsub();
+  }, []);
+
+  const persist = (next) => {
+    setData(next);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      skipNextSnapshot.current = true;
+      docRef.set({ payload: JSON.stringify(next) }).catch(() => setConnErr(true));
+    }, 300);
+  };
+
+  const dayStrip = useMemo(() => {
+    const days = [];
+    const base = new Date();
+    for (let i = -1; i < 9; i++) {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      days.push(d.toISOString().slice(0, 10));
+    }
+    return days;
+  }, []);
+
+  const bookingsForDay = useMemo(() => {
+    if (!data) return [];
+    return data.bookings.filter((b) => b.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time));
+  }, [data, selectedDate]);
+
+  const clientMap = useMemo(() => {
+    if (!data) return [];
+    const map = {};
+    data.bookings.forEach((b) => {
+      const key = b.phone || b.clientName;
+      if (!key) return;
+      if (!map[key]) map[key] = { name: b.clientName, phone: b.phone, cars: new Set(), bookings: [] };
+      map[key].bookings.push(b);
+      if (b.car) map[key].cars.add(b.car + (b.plate ? ` · ${b.plate}` : ""));
+    });
+    return Object.entries(map)
+      .map(([key, v]) => ({ key, ...v, cars: [...v.cars], bookings: v.bookings.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)) }))
+      .filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.phone || "").includes(search))
+      .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  }, [data, search]);
+
+  const saveBooking = (booking) => {
+    const bookings = [...data.bookings];
+    const idx = bookings.findIndex((b) => b.id === booking.id);
+    if (idx >= 0) bookings[idx] = booking; else bookings.push(booking);
+    persist({ ...data, bookings });
+    setShowForm(false); setEditBooking(null);
+  };
+  const deleteBooking = (id) => persist({ ...data, bookings: data.bookings.filter((b) => b.id !== id) });
+  const setStatus = (id, status) => persist({ ...data, bookings: data.bookings.map((b) => (b.id === id ? { ...b, status } : b)) });
+  const addMaster = (name) => persist({ ...data, masters: [...data.masters, name] });
+
+  if (loading || !data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="font-mono text-sm" style={{ color: "#14555A" }}>загрузка…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen font-body" style={{ background: "#EEF1ED", color: "#1B2320" }}>
+      <div className="sticky top-0 z-20" style={{ background: "#1B2320" }}>
+        <div className="px-4 pt-4 pb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wrench size={18} color="#E2900A" strokeWidth={2.5} />
+            <span className="font-display font-bold text-white text-lg tracking-tight">АвтоСервис · Записи</span>
+          </div>
+        </div>
+        <div className="flex px-4 gap-1">
+          {[{ id: "calendar", label: "Календарь", icon: CalIcon }, { id: "clients", label: "Клиенты", icon: User }].map((t) => (
+            <button key={t.id} onClick={() => setView(t.id)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-t-lg font-display font-semibold text-sm transition-colors"
+              style={{ background: view === t.id ? "#EEF1ED" : "transparent", color: view === t.id ? "#1B2320" : "#B7BEB6" }}>
+              <t.icon size={14} />{t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {connErr && (
+        <div className="text-center text-xs font-mono py-2" style={{ background: "#B8452F", color: "#fff" }}>
+          Нет связи с базой данных — проверь firebaseConfig в коде файла
+        </div>
+      )}
+
+      {view === "calendar" && (
+        <div className="pb-24">
+          <div className="flex gap-2 overflow-x-auto px-4 py-3" style={{ background: "#fff", borderBottom: "1px solid #D8DDD6" }}>
+            {dayStrip.map((d) => {
+              const isSel = d === selectedDate, isToday = d === todayStr();
+              return (
+                <button key={d} onClick={() => setSelectedDate(d)}
+                  className="flex-shrink-0 px-3 py-2 rounded-xl font-mono text-xs font-semibold text-center min-w-[62px]"
+                  style={{ background: isSel ? "#14555A" : "#F5F6F3", color: isSel ? "#fff" : "#4B534B", border: isToday && !isSel ? "1.5px solid #E2900A" : "1.5px solid transparent" }}>
+                  {fmtDateLabel(d)}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="px-4 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-display font-semibold text-sm" style={{ color: "#5C645C" }}>
+                {bookingsForDay.length} {bookingsForDay.length === 1 ? "запись" : "записей"} на {fmtDateLabel(selectedDate)}
+              </span>
+            </div>
+
+            {bookingsForDay.length === 0 && (
+              <div className="text-center py-16 px-4 rounded-2xl" style={{ background: "#fff", border: "1px dashed #C7CDC4" }}>
+                <Wrench size={22} color="#C7CDC4" className="mx-auto mb-2" />
+                <p className="text-sm font-body" style={{ color: "#9AA39C" }}>На этот день пока нет записей</p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {bookingsForDay.map((b) => {
+                const s = STATUS[b.status] || STATUS.planned;
+                return (
+                  <div key={b.id} className="ticket ml-2 rounded-r-2xl rounded-l-md overflow-hidden shadow-sm" style={{ background: "#fff", borderLeft: `5px solid ${s.color}` }}>
+                    <div className="p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 font-mono font-semibold text-lg">
+                          <Clock size={16} color={s.color} />{b.time}
+                        </div>
+                        <button className="text-xs font-display font-semibold px-2.5 py-1 rounded-full" style={{ background: s.bg, color: s.color }}
+                          onClick={() => { const order = ["planned", "progress", "done", "cancelled"]; setStatus(b.id, order[(order.indexOf(b.status) + 1) % order.length]); }}>
+                          {s.label}
+                        </button>
+                      </div>
+                      <div className="mt-2 font-display font-semibold text-base">{b.clientName}</div>
+                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ color: "#5C645C" }}>
+                        {b.phone && <span className="flex items-center gap-1"><Phone size={12} />{b.phone}</span>}
+                        {b.car && <span className="flex items-center gap-1"><Car size={12} />{b.car}{b.plate ? ` · ${b.plate}` : ""}</span>}
+                        {b.master && <span className="flex items-center gap-1"><User size={12} />{b.master}</span>}
+                      </div>
+                      {b.service && <div className="mt-2 text-sm font-body">{b.service}</div>}
+                      <div className="mt-3 flex gap-3">
+                        <button className="text-xs font-display font-semibold" style={{ color: "#14555A" }} onClick={() => { setEditBooking(b); setShowForm(true); }}>Изменить</button>
+                        <button className="text-xs font-display font-semibold" style={{ color: "#B8452F" }} onClick={() => deleteBooking(b.id)}>Удалить</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === "clients" && (
+        <div className="px-4 pt-4 pb-24">
+          <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl" style={{ background: "#fff", border: "1px solid #D8DDD6" }}>
+            <Search size={15} color="#9AA39C" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по имени или телефону" className="flex-1 outline-none text-sm font-body bg-transparent" />
+          </div>
+
+          {clientMap.length === 0 && (
+            <div className="text-center py-16" style={{ color: "#9AA39C" }}>
+              <User size={22} className="mx-auto mb-2" color="#C7CDC4" />
+              <p className="text-sm">Клиенты появятся здесь после первой записи</p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {clientMap.map((c) => {
+              const open = openClientKey === c.key;
+              return (
+                <div key={c.key} className="rounded-2xl overflow-hidden" style={{ background: "#fff", border: "1px solid #D8DDD6" }}>
+                  <button className="w-full text-left p-4 flex items-center justify-between" onClick={() => setOpenClientKey(open ? null : c.key)}>
+                    <div>
+                      <div className="font-display font-semibold">{c.name}</div>
+                      <div className="text-xs font-mono mt-0.5" style={{ color: "#8A928A" }}>{c.phone || "без телефона"} · {c.bookings.length} {c.bookings.length === 1 ? "визит" : "визита"}</div>
+                      {c.cars.length > 0 && <div className="text-xs mt-1 flex items-center gap-1" style={{ color: "#5C645C" }}><Car size={11} />{c.cars.join(", ")}</div>}
+                    </div>
+                    <History size={16} color="#B7BEB6" />
+                  </button>
+                  {open && (
+                    <div className="px-4 pb-4 space-y-2" style={{ borderTop: "1px solid #EEF1ED" }}>
+                      {c.bookings.map((b) => {
+                        const s = STATUS[b.status] || STATUS.planned;
+                        return (
+                          <div key={b.id} className="flex items-center justify-between text-sm pt-2">
+                            <div><span className="font-mono" style={{ color: "#5C645C" }}>{b.date} {b.time}</span><span className="ml-2">{b.service || "—"}</span></div>
+                            <span className="text-xs font-display font-semibold px-2 py-0.5 rounded-full" style={{ background: s.bg, color: s.color }}>{s.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <button onClick={() => { setEditBooking(null); setShowForm(true); }}
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full flex items-center justify-center shadow-lg z-30" style={{ background: "#E2900A" }}>
+        <Plus size={26} color="#1B2320" strokeWidth={2.5} />
+      </button>
+
+      {showForm && (
+        <BookingForm initial={editBooking} defaultDate={selectedDate} masters={data.masters}
+          onCancel={() => { setShowForm(false); setEditBooking(null); }}
+          onSave={saveBooking} onAddMaster={addMaster} />
+      )}
+    </div>
+  );
+}
+
+function BookingForm({ initial, defaultDate, masters, onCancel, onSave, onAddMaster }) {
+  const [form, setForm] = useState(initial || {
+    id: String(Date.now()), date: defaultDate, time: "10:00", clientName: "", phone: "",
+    car: "", plate: "", service: "", master: masters[0] || "", status: "planned",
+  });
+  const [newMaster, setNewMaster] = useState("");
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const valid = form.clientName.trim() && form.date && form.time;
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" style={{ background: "rgba(27,35,32,0.55)" }}>
+      <div className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5" style={{ background: "#EEF1ED" }}>
+        <div className="flex items-center justify-between mb-4">
+          <span className="font-display font-bold text-lg">{initial ? "Изменить запись" : "Новая запись"}</span>
+          <button onClick={onCancel}><X size={20} color="#5C645C" /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Дата"><input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} className="input" /></Field>
+            <Field label="Время"><input type="time" value={form.time} onChange={(e) => set("time", e.target.value)} className="input" /></Field>
+          </div>
+          <Field label="Имя клиента *"><input value={form.clientName} onChange={(e) => set("clientName", e.target.value)} className="input" placeholder="Например, Дмитрий" /></Field>
+          <Field label="Телефон"><input value={form.phone} onChange={(e) => set("phone", e.target.value)} className="input" placeholder="+7 900 000-00-00" /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Автомобиль"><input value={form.car} onChange={(e) => set("car", e.target.value)} className="input" placeholder="Toyota Camry" /></Field>
+            <Field label="Гос. номер"><input value={form.plate} onChange={(e) => set("plate", e.target.value)} className="input" placeholder="А123ВС" /></Field>
+          </div>
+          <Field label="Услуга / работа"><textarea value={form.service} onChange={(e) => set("service", e.target.value)} className="input" rows="2" placeholder="Замена масла, диагностика подвески…"></textarea></Field>
+          <Field label="Мастер">
+            <div className="flex flex-wrap gap-2">
+              {masters.map((m) => (
+                <button key={m} onClick={() => set("master", m)} className="px-3 py-1.5 rounded-full text-sm font-body"
+                  style={{ background: form.master === m ? "#14555A" : "#fff", color: form.master === m ? "#fff" : "#1B2320", border: "1px solid #D8DDD6" }}>{m}</button>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-2">
+              <input value={newMaster} onChange={(e) => setNewMaster(e.target.value)} placeholder="Добавить мастера" className="input flex-1" />
+              <button onClick={() => { if (newMaster.trim()) { onAddMaster(newMaster.trim()); set("master", newMaster.trim()); setNewMaster(""); } }}
+                className="px-3 rounded-lg font-display text-sm font-semibold" style={{ background: "#fff", border: "1px solid #D8DDD6" }}>+</button>
+            </div>
+          </Field>
+          <Field label="Статус">
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(STATUS).map(([k, s]) => (
+                <button key={k} onClick={() => set("status", k)} className="px-3 py-1.5 rounded-full text-xs font-display font-semibold"
+                  style={{ background: form.status === k ? s.color : s.bg, color: form.status === k ? "#fff" : s.color }}>{s.label}</button>
+              ))}
+            </div>
+          </Field>
+        </div>
+        <button disabled={!valid} onClick={() => onSave(form)} className="w-full mt-5 py-3 rounded-xl font-display font-bold flex items-center justify-center gap-2"
+          style={{ background: valid ? "#14555A" : "#C7CDC4", color: "#fff" }}>
+          <Check size={17} /> Сохранить запись
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-display font-semibold mb-1" style={{ color: "#5C645C" }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
