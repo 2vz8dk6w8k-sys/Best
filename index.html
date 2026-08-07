@@ -113,20 +113,35 @@ function App() {
 
   // Realtime sync from Firestore — все сотрудники видят изменения друг друга
   useEffect(() => {
-    const unsub = docRef.onSnapshot(
-      (snap) => {
-        if (skipNextSnapshot.current) { skipNextSnapshot.current = false; return; }
-        if (snap.exists) {
-          setData(snap.data().payload ? JSON.parse(snap.data().payload) : loadDefault());
-        } else {
-          setData(loadDefault());
-        }
-        setLoading(false);
-        setConnErr(false);
-      },
-      (err) => { console.error(err); setConnErr(true); setLoading(false); setData(loadDefault()); }
-    );
-    return () => unsub();
+    const timeout = setTimeout(() => {
+      setConnErr(true);
+      setLoading(false);
+      setData((d) => d || loadDefault());
+    }, 8000);
+    let unsub = () => {};
+    try {
+      unsub = docRef.onSnapshot(
+        (snap) => {
+          clearTimeout(timeout);
+          if (skipNextSnapshot.current) { skipNextSnapshot.current = false; return; }
+          if (snap.exists) {
+            setData(snap.data().payload ? JSON.parse(snap.data().payload) : loadDefault());
+          } else {
+            setData(loadDefault());
+          }
+          setLoading(false);
+          setConnErr(false);
+        },
+        (err) => { clearTimeout(timeout); console.error(err); setConnErr(true); setLoading(false); setData(loadDefault()); }
+      );
+    } catch (err) {
+      clearTimeout(timeout);
+      console.error(err);
+      setConnErr(true);
+      setLoading(false);
+      setData(loadDefault());
+    }
+    return () => { clearTimeout(timeout); unsub(); };
   }, []);
 
   const persist = (next) => {
@@ -183,8 +198,13 @@ function App() {
 
   if (loading || !data) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
         <div className="font-mono text-sm" style={{ color: "#14555A" }}>загрузка…</div>
+        {connErr && (
+          <div className="mt-4 text-sm font-body" style={{ color: "#B8452F" }}>
+            Не удаётся подключиться к базе данных.<br/>Проверь: 1) создана ли Firestore Database в Firebase, 2) работает ли мобильный интернет с Google-сервисами (попробуй через Wi-Fi).
+          </div>
+        )}
       </div>
     );
   }
