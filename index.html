@@ -4,68 +4,110 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>АвтоСервис · Записи</title>
-<link rel="apple-touch-icon" href="data:image/png;base64,">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-
-<!-- Firebase (бесплатная общая база данных) -->
+<!-- Firebase — единственная внешняя зависимость, нужна для общей базы данных -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
-  html, body { margin:0; padding:0; background:#EEF1ED; }
-  .font-display { font-family: 'Space Grotesk', sans-serif; }
-  .font-body { font-family: 'Inter', sans-serif; }
-  .font-mono { font-family: 'IBM Plex Mono', monospace; }
-  .ticket { position: relative; }
-  .ticket::before, .ticket::after {
-    content: '';
-    position: absolute;
-    left: -9px;
-    width: 18px;
-    height: 18px;
-    border-radius: 999px;
-    background: #EEF1ED;
-    z-index: 2;
-  }
-  .ticket::before { top: -9px; }
-  .ticket::after { bottom: -9px; }
-  .input {
-    width: 100%;
-    background: #fff;
-    border: 1px solid #D8DDD6;
-    border-radius: 10px;
-    padding: 9px 12px;
-    font-size: 14px;
-    font-family: 'Inter', sans-serif;
-    outline: none;
-  }
-  .input:focus { border-color: #14555A; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:#EEF1ED; color:#1B2320;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  .mono { font-family: "SFMono-Regular", Menlo, Consolas, monospace; }
+  .hidden { display:none !important; }
+
+  .header { position: sticky; top:0; z-index:20; background:#1B2320; padding:14px 16px 0; }
+  .header-title { color:#fff; font-weight:700; font-size:18px; display:flex; align-items:center; gap:8px; }
+  .tabs { display:flex; gap:4px; margin-top:10px; }
+  .tab-btn { border:none; background:transparent; color:#B7BEB6; font-weight:600; font-size:14px;
+    padding:10px 14px; border-radius:10px 10px 0 0; cursor:pointer; }
+  .tab-btn.active { background:#EEF1ED; color:#1B2320; }
+
+  .err-banner { text-align:center; font-size:12px; padding:8px; background:#B8452F; color:#fff; }
+
+  .day-strip { display:flex; gap:8px; overflow-x:auto; padding:12px 16px; background:#fff; border-bottom:1px solid #D8DDD6; }
+  .day-btn { flex-shrink:0; padding:8px 12px; border-radius:12px; font-size:12px; font-weight:600;
+    text-align:center; min-width:62px; background:#F5F6F3; color:#4B534B; border:1.5px solid transparent; }
+  .day-btn.selected { background:#14555A; color:#fff; }
+  .day-btn.today:not(.selected) { border-color:#E2900A; }
+
+  .content { padding:16px; padding-bottom:96px; }
+  .day-summary { font-weight:600; font-size:14px; color:#5C645C; margin-bottom:12px; }
+
+  .empty-state { text-align:center; padding:56px 16px; border-radius:16px; background:#fff; border:1px dashed #C7CDC4; color:#9AA39C; font-size:14px; }
+
+  .ticket { position:relative; margin-left:8px; border-radius:4px 16px 16px 4px; overflow:hidden;
+    background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; }
+  .ticket::before, .ticket::after { content:''; position:absolute; left:-9px; width:18px; height:18px;
+    border-radius:999px; background:#EEF1ED; z-index:2; }
+  .ticket::before { top:-9px; } .ticket::after { bottom:-9px; }
+  .ticket-body { padding:16px; }
+  .ticket-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  .ticket-time { display:flex; align-items:center; gap:6px; font-weight:600; font-size:18px; }
+  .status-pill { border:none; font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; cursor:pointer; }
+  .ticket-name { margin-top:8px; font-weight:600; font-size:16px; }
+  .ticket-meta { margin-top:4px; display:flex; flex-wrap:wrap; gap-column:16px; font-size:13px; color:#5C645C; }
+  .ticket-meta span { margin-right:14px; }
+  .ticket-service { margin-top:8px; font-size:14px; }
+  .ticket-actions { margin-top:12px; display:flex; gap:14px; }
+  .link-btn { border:none; background:none; font-weight:600; font-size:12px; cursor:pointer; padding:0; }
+
+  .search-box { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:12px;
+    background:#fff; border:1px solid #D8DDD6; margin-bottom:16px; }
+  .search-box input { border:none; outline:none; flex:1; font-size:14px; background:transparent; }
+
+  .client-card { border-radius:16px; overflow:hidden; background:#fff; border:1px solid #D8DDD6; margin-bottom:8px; }
+  .client-head { width:100%; text-align:left; padding:14px; background:none; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:space-between; }
+  .client-name { font-weight:600; }
+  .client-sub { font-size:12px; color:#8A928A; margin-top:2px; }
+  .client-cars { font-size:12px; color:#5C645C; margin-top:4px; }
+  .client-history { padding:0 14px 14px; border-top:1px solid #EEF1ED; }
+  .history-row { display:flex; align-items:center; justify-content:space-between; font-size:13px; padding-top:8px; }
+
+  .fab { position:fixed; bottom:24px; right:24px; width:56px; height:56px; border-radius:999px; border:none;
+    background:#E2900A; color:#1B2320; font-size:28px; font-weight:700; box-shadow:0 4px 10px rgba(0,0,0,0.25); cursor:pointer; z-index:30; }
+
+  .modal-backdrop { position:fixed; inset:0; background:rgba(27,35,32,0.55); z-index:40; display:flex;
+    align-items:flex-end; justify-content:center; }
+  .modal { width:100%; max-width:480px; max-height:92vh; overflow-y:auto; background:#EEF1ED;
+    border-radius:24px 24px 0 0; padding:20px; }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .modal-title { font-weight:700; font-size:18px; }
+  .close-btn { border:none; background:none; font-size:20px; color:#5C645C; cursor:pointer; }
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:12px; font-weight:600; color:#5C645C; margin-bottom:4px; }
+  .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .input { width:100%; background:#fff; border:1px solid #D8DDD6; border-radius:10px; padding:9px 12px; font-size:14px; outline:none; font-family:inherit; }
+  .input:focus { border-color:#14555A; }
+  .chip-row { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { padding:6px 12px; border-radius:999px; font-size:13px; border:1px solid #D8DDD6; background:#fff; color:#1B2320; cursor:pointer; }
+  .chip.selected { background:#14555A; color:#fff; border-color:#14555A; }
+  .status-chip { padding:6px 12px; border-radius:999px; font-size:12px; font-weight:600; border:none; cursor:pointer; }
+  .add-master-row { display:flex; gap:8px; margin-top:8px; }
+  .add-master-row .input { flex:1; }
+  .add-btn { padding:0 12px; border-radius:10px; font-weight:600; background:#fff; border:1px solid #D8DDD6; cursor:pointer; }
+  .save-btn { width:100%; margin-top:16px; padding:12px; border-radius:12px; font-weight:700; border:none;
+    color:#fff; background:#14555A; cursor:pointer; font-size:15px; }
+  .save-btn:disabled { background:#C7CDC4; }
+
+  .center-screen { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 24px; text-align:center; }
 </style>
 </head>
 <body>
-<div id="root"></div>
 
 <!--
   ====================== НАСТРОЙКА (сделай один раз) ======================
-  1. Зайди на https://console.firebase.google.com
-  2. Создай проект (бесплатно, "Spark" план).
-  3. В проекте: Build → Firestore Database → Create database → Start in test mode.
-  4. В проекте: Project settings (шестерёнка) → General → в разделе "Your apps"
-     нажми "</>" (Web app), дай имя, скопируй объект firebaseConfig.
-  5. Вставь его вместо firebaseConfig ниже.
+  1. console.firebase.google.com → создай проект → Firestore Database → Create database (test mode)
+  2. Project settings → Your apps → добавь Web app → скопируй firebaseConfig
+  3. Вставь его вместо объекта ниже
   ===========================================================================
 -->
 <script>
-  const firebaseConfig = {
+  var firebaseConfig = {
     apiKey: "AIzaSyBwO2PLqtOTRyPfLbO-i0GAKcmFR-XJajU",
     authDomain: "best-f0032.firebaseapp.com",
     projectId: "best-f0032",
@@ -73,362 +115,423 @@
     messagingSenderId: "1014090691525",
     appId: "1:1014090691525:web:79d19904e7fd8402df91ac"
   };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-  const docRef = db.collection("garage").doc("shared-data");
 </script>
 
-<script type="text/babel">
-const { useState, useEffect, useMemo, useRef } = React;
-const {
-  Plus, X, Phone, Car, Wrench, Search, Clock, User, Check, Calendar: CalIcon, History
-} = lucide;
+<div id="app"></div>
 
-const STATUS = {
-  planned:  { label: "Запланировано", color: "#E2900A", bg: "#FDF3E1" },
-  progress: { label: "В работе",      color: "#14555A", bg: "#E4EEEE" },
-  done:     { label: "Готово",        color: "#4C7A5E", bg: "#E9F1EA" },
-  cancelled:{ label: "Отменено",      color: "#9AA39C", bg: "#F0F1EE" },
-};
+<script>
+(function () {
+  "use strict";
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
-const fmtDateLabel = (d) => {
-  const dt = new Date(d + "T00:00:00");
-  return dt.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "short" });
-};
-const loadDefault = () => ({ bookings: [], masters: ["Иван", "Сергей", "Алексей"] });
+  var STATUS = {
+    planned:  { label: "Запланировано", color: "#E2900A", bg: "#FDF3E1" },
+    progress: { label: "В работе",      color: "#14555A", bg: "#E4EEEE" },
+    done:     { label: "Готово",        color: "#4C7A5E", bg: "#E9F1EA" },
+    cancelled:{ label: "Отменено",      color: "#9AA39C", bg: "#F0F1EE" }
+  };
+  var STATUS_ORDER = ["planned", "progress", "done", "cancelled"];
 
-function App() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [connErr, setConnErr] = useState(false);
-  const [view, setView] = useState("calendar");
-  const [selectedDate, setSelectedDate] = useState(todayStr());
-  const [showForm, setShowForm] = useState(false);
-  const [editBooking, setEditBooking] = useState(null);
-  const [search, setSearch] = useState("");
-  const [openClientKey, setOpenClientKey] = useState(null);
-  const saveTimer = useRef(null);
-  const skipNextSnapshot = useRef(false);
+  var root = document.getElementById("app");
+  var state = {
+    phase: "loading", // loading | error | ready
+    errorMsg: "",
+    data: null,       // { bookings: [], masters: [] }
+    view: "calendar",
+    selectedDate: todayStr(),
+    search: "",
+    openClientKey: null,
+    showForm: false,
+    editBooking: null
+  };
 
-  // Realtime sync from Firestore — все сотрудники видят изменения друг друга
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setConnErr(true);
-      setLoading(false);
-      setData((d) => d || loadDefault());
-    }, 8000);
-    let unsub = () => {};
+  var db = null, docRef = null, saveTimer = null, skipNextSnapshot = false, loadTimeout = null;
+
+  function todayStr() {
+    var d = new Date();
+    return d.toISOString().slice(0, 10);
+  }
+  function fmtDateLabel(dStr) {
+    var d = new Date(dStr + "T00:00:00");
+    var days = ["вс","пн","вт","ср","чт","пт","сб"];
+    var months = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+    return days[d.getDay()] + ", " + d.getDate() + " " + months[d.getMonth()];
+  }
+  function esc(s) {
+    if (s === undefined || s === null) return "";
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  function defaultData() { return { bookings: [], masters: ["Иван", "Сергей", "Алексей"] }; }
+
+  function init() {
     try {
-      unsub = docRef.onSnapshot(
-        (snap) => {
-          clearTimeout(timeout);
-          if (skipNextSnapshot.current) { skipNextSnapshot.current = false; return; }
-          if (snap.exists) {
-            setData(snap.data().payload ? JSON.parse(snap.data().payload) : loadDefault());
-          } else {
-            setData(loadDefault());
-          }
-          setLoading(false);
-          setConnErr(false);
-        },
-        (err) => { clearTimeout(timeout); console.error(err); setConnErr(true); setLoading(false); setData(loadDefault()); }
-      );
-    } catch (err) {
-      clearTimeout(timeout);
-      console.error(err);
-      setConnErr(true);
-      setLoading(false);
-      setData(loadDefault());
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      docRef = db.collection("garage").doc("shared-data");
+    } catch (e) {
+      state.phase = "error";
+      state.errorMsg = "Не удалось инициализировать Firebase. Проверь firebaseConfig в коде файла.";
+      render();
+      return;
     }
-    return () => { clearTimeout(timeout); unsub(); };
-  }, []);
 
-  const persist = (next) => {
-    setData(next);
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      skipNextSnapshot.current = true;
-      docRef.set({ payload: JSON.stringify(next) }).catch(() => setConnErr(true));
-    }, 300);
-  };
+    loadTimeout = setTimeout(function () {
+      state.phase = "error";
+      state.errorMsg = "Нет ответа от базы данных дольше 10 секунд. Возможно: 1) не создана Firestore Database в консоли Firebase, 2) сеть блокирует доступ к серверам Google (попробуй другой Wi-Fi/интернет), 3) в правилах Firestore не нажали Publish.";
+      state.data = defaultData();
+      render();
+    }, 10000);
 
-  const dayStrip = useMemo(() => {
-    const days = [];
-    const base = new Date();
-    for (let i = -1; i < 9; i++) {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      days.push(d.toISOString().slice(0, 10));
-    }
-    return days;
-  }, []);
-
-  const bookingsForDay = useMemo(() => {
-    if (!data) return [];
-    return data.bookings.filter((b) => b.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time));
-  }, [data, selectedDate]);
-
-  const clientMap = useMemo(() => {
-    if (!data) return [];
-    const map = {};
-    data.bookings.forEach((b) => {
-      const key = b.phone || b.clientName;
-      if (!key) return;
-      if (!map[key]) map[key] = { name: b.clientName, phone: b.phone, cars: new Set(), bookings: [] };
-      map[key].bookings.push(b);
-      if (b.car) map[key].cars.add(b.car + (b.plate ? ` · ${b.plate}` : ""));
+    docRef.onSnapshot(function (snap) {
+      clearTimeout(loadTimeout);
+      if (skipNextSnapshot) { skipNextSnapshot = false; return; }
+      if (snap.exists) {
+        try {
+          var payload = snap.data().payload;
+          state.data = payload ? JSON.parse(payload) : defaultData();
+        } catch (e) {
+          state.data = defaultData();
+        }
+      } else {
+        state.data = defaultData();
+      }
+      state.phase = "ready";
+      render();
+    }, function (err) {
+      clearTimeout(loadTimeout);
+      state.phase = "error";
+      state.errorMsg = "Ошибка доступа к базе: " + (err && err.message ? err.message : err) + ". Проверь правила безопасности Firestore (вкладка Rules) — должно быть allow read, write: if true; и нажат Publish.";
+      state.data = defaultData();
+      render();
     });
-    return Object.entries(map)
-      .map(([key, v]) => ({ key, ...v, cars: [...v.cars], bookings: v.bookings.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)) }))
-      .filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.phone || "").includes(search))
-      .sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  }, [data, search]);
 
-  const saveBooking = (booking) => {
-    const bookings = [...data.bookings];
-    const idx = bookings.findIndex((b) => b.id === booking.id);
-    if (idx >= 0) bookings[idx] = booking; else bookings.push(booking);
-    persist({ ...data, bookings });
-    setShowForm(false); setEditBooking(null);
-  };
-  const deleteBooking = (id) => persist({ ...data, bookings: data.bookings.filter((b) => b.id !== id) });
-  const setStatus = (id, status) => persist({ ...data, bookings: data.bookings.map((b) => (b.id === id ? { ...b, status } : b)) });
-  const addMaster = (name) => persist({ ...data, masters: [...data.masters, name] });
-
-  if (loading || !data) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
-        <div className="font-mono text-sm" style={{ color: "#14555A" }}>загрузка…</div>
-        {connErr && (
-          <div className="mt-4 text-sm font-body" style={{ color: "#B8452F" }}>
-            Не удаётся подключиться к базе данных.<br/>Проверь: 1) создана ли Firestore Database в Firebase, 2) работает ли мобильный интернет с Google-сервисами (попробуй через Wi-Fi).
-          </div>
-        )}
-      </div>
-    );
+    render();
   }
 
-  return (
-    <div className="min-h-screen font-body" style={{ background: "#EEF1ED", color: "#1B2320" }}>
-      <div className="sticky top-0 z-20" style={{ background: "#1B2320" }}>
-        <div className="px-4 pt-4 pb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Wrench size={18} color="#E2900A" strokeWidth={2.5} />
-            <span className="font-display font-bold text-white text-lg tracking-tight">АвтоСервис · Записи</span>
-          </div>
-        </div>
-        <div className="flex px-4 gap-1">
-          {[{ id: "calendar", label: "Календарь", icon: CalIcon }, { id: "clients", label: "Клиенты", icon: User }].map((t) => (
-            <button key={t.id} onClick={() => setView(t.id)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-t-lg font-display font-semibold text-sm transition-colors"
-              style={{ background: view === t.id ? "#EEF1ED" : "transparent", color: view === t.id ? "#1B2320" : "#B7BEB6" }}>
-              <t.icon size={14} />{t.label}
-            </button>
-          ))}
-        </div>
-      </div>
+  function persist(next) {
+    state.data = next;
+    render();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      skipNextSnapshot = true;
+      docRef.set({ payload: JSON.stringify(next) }).catch(function () {
+        state.phase = "error";
+        state.errorMsg = "Не удалось сохранить изменения — проверь соединение.";
+        render();
+      });
+    }, 300);
+  }
 
-      {connErr && (
-        <div className="text-center text-xs font-mono py-2" style={{ background: "#B8452F", color: "#fff" }}>
-          Нет связи с базой данных — проверь firebaseConfig в коде файла
-        </div>
-      )}
+  function dayStrip() {
+    var out = [];
+    var base = new Date();
+    for (var i = -1; i < 9; i++) {
+      var d = new Date(base);
+      d.setDate(base.getDate() + i);
+      out.push(d.toISOString().slice(0, 10));
+    }
+    return out;
+  }
 
-      {view === "calendar" && (
-        <div className="pb-24">
-          <div className="flex gap-2 overflow-x-auto px-4 py-3" style={{ background: "#fff", borderBottom: "1px solid #D8DDD6" }}>
-            {dayStrip.map((d) => {
-              const isSel = d === selectedDate, isToday = d === todayStr();
-              return (
-                <button key={d} onClick={() => setSelectedDate(d)}
-                  className="flex-shrink-0 px-3 py-2 rounded-xl font-mono text-xs font-semibold text-center min-w-[62px]"
-                  style={{ background: isSel ? "#14555A" : "#F5F6F3", color: isSel ? "#fff" : "#4B534B", border: isToday && !isSel ? "1.5px solid #E2900A" : "1.5px solid transparent" }}>
-                  {fmtDateLabel(d)}
-                </button>
-              );
-            })}
-          </div>
+  function bookingsForDay() {
+    return state.data.bookings
+      .filter(function (b) { return b.date === state.selectedDate; })
+      .sort(function (a, b) { return a.time.localeCompare(b.time); });
+  }
 
-          <div className="px-4 pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-display font-semibold text-sm" style={{ color: "#5C645C" }}>
-                {bookingsForDay.length} {bookingsForDay.length === 1 ? "запись" : "записей"} на {fmtDateLabel(selectedDate)}
-              </span>
-            </div>
+  function clientList() {
+    var map = {};
+    state.data.bookings.forEach(function (b) {
+      var key = b.phone || b.clientName;
+      if (!key) return;
+      if (!map[key]) map[key] = { name: b.clientName, phone: b.phone, cars: [], bookings: [] };
+      map[key].bookings.push(b);
+      if (b.car) {
+        var carStr = b.car + (b.plate ? " · " + b.plate : "");
+        if (map[key].cars.indexOf(carStr) === -1) map[key].cars.push(carStr);
+      }
+    });
+    var list = Object.keys(map).map(function (key) {
+      var c = map[key];
+      c.key = key;
+      c.bookings.sort(function (a, b) { return (b.date + b.time).localeCompare(a.date + a.time); });
+      return c;
+    });
+    var q = state.search.toLowerCase();
+    if (q) {
+      list = list.filter(function (c) {
+        return c.name.toLowerCase().indexOf(q) !== -1 || (c.phone || "").indexOf(q) !== -1;
+      });
+    }
+    list.sort(function (a, b) { return a.name.localeCompare(b.name, "ru"); });
+    return list;
+  }
 
-            {bookingsForDay.length === 0 && (
-              <div className="text-center py-16 px-4 rounded-2xl" style={{ background: "#fff", border: "1px dashed #C7CDC4" }}>
-                <Wrench size={22} color="#C7CDC4" className="mx-auto mb-2" />
-                <p className="text-sm font-body" style={{ color: "#9AA39C" }}>На этот день пока нет записей</p>
-              </div>
-            )}
+  // ---- Actions exposed on window for inline handlers ----
+  window.__app = {
+    setView: function (v) { state.view = v; render(); },
+    selectDate: function (d) { state.selectedDate = d; render(); },
+    setSearch: function (v) { state.search = v; render(); },
+    toggleClient: function (key) { state.openClientKey = (state.openClientKey === key) ? null : key; render(); },
+    cycleStatus: function (id) {
+      var bookings = state.data.bookings.map(function (b) {
+        if (b.id !== id) return b;
+        var idx = STATUS_ORDER.indexOf(b.status);
+        var next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
+        return Object.assign({}, b, { status: next });
+      });
+      persist(Object.assign({}, state.data, { bookings: bookings }));
+    },
+    deleteBooking: function (id) {
+      var bookings = state.data.bookings.filter(function (b) { return b.id !== id; });
+      persist(Object.assign({}, state.data, { bookings: bookings }));
+    },
+    openNewForm: function () { state.editBooking = null; state.showForm = true; render(); },
+    openEditForm: function (id) {
+      state.editBooking = state.data.bookings.filter(function (b) { return b.id === id; })[0] || null;
+      state.showForm = true; render();
+    },
+    closeForm: function () { state.showForm = false; state.editBooking = null; render(); },
+    saveForm: function () {
+      var f = readForm();
+      if (!f.clientName.trim() || !f.date || !f.time) return;
+      var bookings = state.data.bookings.slice();
+      var idx = bookings.findIndex(function (b) { return b.id === f.id; });
+      if (idx >= 0) bookings[idx] = f; else bookings.push(f);
+      persist(Object.assign({}, state.data, { bookings: bookings }));
+      state.showForm = false; state.editBooking = null; render();
+    },
+    pickMaster: function (m) {
+      document.getElementById("f_master").value = m;
+      highlightChip("masterChips", "data-master", m);
+    },
+    addMaster: function () {
+      var input = document.getElementById("f_newMaster");
+      var name = input.value.trim();
+      if (!name) return;
+      var masters = state.data.masters.concat([name]);
+      state.data = Object.assign({}, state.data, { masters: masters });
+      docRef.set({ payload: JSON.stringify(state.data) }).catch(function(){});
+      var chipsHtml = document.getElementById("masterChips").innerHTML;
+      chipsHtml += '<button type="button" class="chip selected" data-master="' + esc(name) + '" onclick="__app.pickMaster(\'' + name.replace(/'/g, "\\'") + '\')">' + esc(name) + '</button>';
+      document.getElementById("masterChips").innerHTML = chipsHtml;
+      document.getElementById("f_master").value = name;
+      highlightChip("masterChips", "data-master", name);
+      input.value = "";
+    },
+    pickStatus: function (k) {
+      document.getElementById("f_status").value = k;
+      highlightChip("statusChips", "data-status", k, true);
+    },
+    onFormFieldChange: function () { /* no-op, values read on save */ }
+  };
 
-            <div className="space-y-4">
-              {bookingsForDay.map((b) => {
-                const s = STATUS[b.status] || STATUS.planned;
-                return (
-                  <div key={b.id} className="ticket ml-2 rounded-r-2xl rounded-l-md overflow-hidden shadow-sm" style={{ background: "#fff", borderLeft: `5px solid ${s.color}` }}>
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 font-mono font-semibold text-lg">
-                          <Clock size={16} color={s.color} />{b.time}
-                        </div>
-                        <button className="text-xs font-display font-semibold px-2.5 py-1 rounded-full" style={{ background: s.bg, color: s.color }}
-                          onClick={() => { const order = ["planned", "progress", "done", "cancelled"]; setStatus(b.id, order[(order.indexOf(b.status) + 1) % order.length]); }}>
-                          {s.label}
-                        </button>
-                      </div>
-                      <div className="mt-2 font-display font-semibold text-base">{b.clientName}</div>
-                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ color: "#5C645C" }}>
-                        {b.phone && <span className="flex items-center gap-1"><Phone size={12} />{b.phone}</span>}
-                        {b.car && <span className="flex items-center gap-1"><Car size={12} />{b.car}{b.plate ? ` · ${b.plate}` : ""}</span>}
-                        {b.master && <span className="flex items-center gap-1"><User size={12} />{b.master}</span>}
-                      </div>
-                      {b.service && <div className="mt-2 text-sm font-body">{b.service}</div>}
-                      <div className="mt-3 flex gap-3">
-                        <button className="text-xs font-display font-semibold" style={{ color: "#14555A" }} onClick={() => { setEditBooking(b); setShowForm(true); }}>Изменить</button>
-                        <button className="text-xs font-display font-semibold" style={{ color: "#B8452F" }} onClick={() => deleteBooking(b.id)}>Удалить</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+  function readForm() {
+    var g = function (id) { return document.getElementById(id); };
+    var existing = state.editBooking;
+    return {
+      id: existing ? existing.id : String(Date.now()),
+      date: g("f_date").value,
+      time: g("f_time").value,
+      clientName: g("f_clientName").value,
+      phone: g("f_phone").value,
+      car: g("f_car").value,
+      plate: g("f_plate").value,
+      service: g("f_service").value,
+      master: g("f_master").value,
+      status: g("f_status").value
+    };
+  }
 
-      {view === "clients" && (
-        <div className="px-4 pt-4 pb-24">
-          <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl" style={{ background: "#fff", border: "1px solid #D8DDD6" }}>
-            <Search size={15} color="#9AA39C" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по имени или телефону" className="flex-1 outline-none text-sm font-body bg-transparent" />
-          </div>
+  // ---- Rendering ----
+  function render(preserveFormFocus) {
+    if (state.phase === "loading" || state.phase === "error") {
+      root.innerHTML =
+        '<div class="center-screen">' +
+          '<div class="mono" style="color:#14555A;font-size:14px;">загрузка…</div>' +
+          (state.phase === "error"
+            ? '<div style="margin-top:16px;font-size:14px;color:#B8452F;max-width:340px;">' + esc(state.errorMsg) + '</div>'
+            : '') +
+        '</div>';
+      return;
+    }
 
-          {clientMap.length === 0 && (
-            <div className="text-center py-16" style={{ color: "#9AA39C" }}>
-              <User size={22} className="mx-auto mb-2" color="#C7CDC4" />
-              <p className="text-sm">Клиенты появятся здесь после первой записи</p>
-            </div>
-          )}
+    var html = "";
+    html += '<div class="header">';
+    html += '<div class="header-title">🔧 АвтоСервис · Записи</div>';
+    html += '<div class="tabs">';
+    html += '<button class="tab-btn ' + (state.view === "calendar" ? "active" : "") + '" onclick="__app.setView(\'calendar\')">Календарь</button>';
+    html += '<button class="tab-btn ' + (state.view === "clients" ? "active" : "") + '" onclick="__app.setView(\'clients\')">Клиенты</button>';
+    html += '</div></div>';
 
-          <div className="space-y-2">
-            {clientMap.map((c) => {
-              const open = openClientKey === c.key;
-              return (
-                <div key={c.key} className="rounded-2xl overflow-hidden" style={{ background: "#fff", border: "1px solid #D8DDD6" }}>
-                  <button className="w-full text-left p-4 flex items-center justify-between" onClick={() => setOpenClientKey(open ? null : c.key)}>
-                    <div>
-                      <div className="font-display font-semibold">{c.name}</div>
-                      <div className="text-xs font-mono mt-0.5" style={{ color: "#8A928A" }}>{c.phone || "без телефона"} · {c.bookings.length} {c.bookings.length === 1 ? "визит" : "визита"}</div>
-                      {c.cars.length > 0 && <div className="text-xs mt-1 flex items-center gap-1" style={{ color: "#5C645C" }}><Car size={11} />{c.cars.join(", ")}</div>}
-                    </div>
-                    <History size={16} color="#B7BEB6" />
-                  </button>
-                  {open && (
-                    <div className="px-4 pb-4 space-y-2" style={{ borderTop: "1px solid #EEF1ED" }}>
-                      {c.bookings.map((b) => {
-                        const s = STATUS[b.status] || STATUS.planned;
-                        return (
-                          <div key={b.id} className="flex items-center justify-between text-sm pt-2">
-                            <div><span className="font-mono" style={{ color: "#5C645C" }}>{b.date} {b.time}</span><span className="ml-2">{b.service || "—"}</span></div>
-                            <span className="text-xs font-display font-semibold px-2 py-0.5 rounded-full" style={{ background: s.bg, color: s.color }}>{s.label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+    html += state.view === "calendar" ? renderCalendar() : renderClients();
 
-      <button onClick={() => { setEditBooking(null); setShowForm(true); }}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full flex items-center justify-center shadow-lg z-30" style={{ background: "#E2900A" }}>
-        <Plus size={26} color="#1B2320" strokeWidth={2.5} />
-      </button>
+    html += '<button class="fab" onclick="__app.openNewForm()">+</button>';
 
-      {showForm && (
-        <BookingForm initial={editBooking} defaultDate={selectedDate} masters={data.masters}
-          onCancel={() => { setShowForm(false); setEditBooking(null); }}
-          onSave={saveBooking} onAddMaster={addMaster} />
-      )}
-    </div>
-  );
-}
+    var formWasOpen = !!document.getElementById("f_clientName");
+    if (state.showForm) html += renderForm();
 
-function BookingForm({ initial, defaultDate, masters, onCancel, onSave, onAddMaster }) {
-  const [form, setForm] = useState(initial || {
-    id: String(Date.now()), date: defaultDate, time: "10:00", clientName: "", phone: "",
-    car: "", plate: "", service: "", master: masters[0] || "", status: "planned",
-  });
-  const [newMaster, setNewMaster] = useState("");
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const valid = form.clientName.trim() && form.date && form.time;
+    root.innerHTML = html;
 
-  return (
-    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" style={{ background: "rgba(27,35,32,0.55)" }}>
-      <div className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5" style={{ background: "#EEF1ED" }}>
-        <div className="flex items-center justify-between mb-4">
-          <span className="font-display font-bold text-lg">{initial ? "Изменить запись" : "Новая запись"}</span>
-          <button onClick={onCancel}><X size={20} color="#5C645C" /></button>
-        </div>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Дата"><input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} className="input" /></Field>
-            <Field label="Время"><input type="time" value={form.time} onChange={(e) => set("time", e.target.value)} className="input" /></Field>
-          </div>
-          <Field label="Имя клиента *"><input value={form.clientName} onChange={(e) => set("clientName", e.target.value)} className="input" placeholder="Например, Дмитрий" /></Field>
-          <Field label="Телефон"><input value={form.phone} onChange={(e) => set("phone", e.target.value)} className="input" placeholder="+7 900 000-00-00" /></Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Автомобиль"><input value={form.car} onChange={(e) => set("car", e.target.value)} className="input" placeholder="Toyota Camry" /></Field>
-            <Field label="Гос. номер"><input value={form.plate} onChange={(e) => set("plate", e.target.value)} className="input" placeholder="А123ВС" /></Field>
-          </div>
-          <Field label="Услуга / работа"><textarea value={form.service} onChange={(e) => set("service", e.target.value)} className="input" rows="2" placeholder="Замена масла, диагностика подвески…"></textarea></Field>
-          <Field label="Мастер">
-            <div className="flex flex-wrap gap-2">
-              {masters.map((m) => (
-                <button key={m} onClick={() => set("master", m)} className="px-3 py-1.5 rounded-full text-sm font-body"
-                  style={{ background: form.master === m ? "#14555A" : "#fff", color: form.master === m ? "#fff" : "#1B2320", border: "1px solid #D8DDD6" }}>{m}</button>
-              ))}
-            </div>
-            <div className="flex gap-2 mt-2">
-              <input value={newMaster} onChange={(e) => setNewMaster(e.target.value)} placeholder="Добавить мастера" className="input flex-1" />
-              <button onClick={() => { if (newMaster.trim()) { onAddMaster(newMaster.trim()); set("master", newMaster.trim()); setNewMaster(""); } }}
-                className="px-3 rounded-lg font-display text-sm font-semibold" style={{ background: "#fff", border: "1px solid #D8DDD6" }}>+</button>
-            </div>
-          </Field>
-          <Field label="Статус">
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(STATUS).map(([k, s]) => (
-                <button key={k} onClick={() => set("status", k)} className="px-3 py-1.5 rounded-full text-xs font-display font-semibold"
-                  style={{ background: form.status === k ? s.color : s.bg, color: form.status === k ? "#fff" : s.color }}>{s.label}</button>
-              ))}
-            </div>
-          </Field>
-        </div>
-        <button disabled={!valid} onClick={() => onSave(form)} className="w-full mt-5 py-3 rounded-xl font-display font-bold flex items-center justify-center gap-2"
-          style={{ background: valid ? "#14555A" : "#C7CDC4", color: "#fff" }}>
-          <Check size={17} /> Сохранить запись
-        </button>
-      </div>
-    </div>
-  );
-}
+    if (state.showForm && !formWasOpen) {
+      setFormValues(state.editBooking);
+    }
+  }
 
-function Field({ label, children }) {
-  return (
-    <div>
-      <label className="block text-xs font-display font-semibold mb-1" style={{ color: "#5C645C" }}>{label}</label>
-      {children}
-    </div>
-  );
-}
+  function renderCalendar() {
+    var html = '<div class="day-strip">';
+    var today = todayStr();
+    dayStrip().forEach(function (d) {
+      var cls = "day-btn" + (d === state.selectedDate ? " selected" : "") + (d === today ? " today" : "");
+      html += '<button class="' + cls + '" onclick="__app.selectDate(\'' + d + '\')">' + esc(fmtDateLabel(d)) + '</button>';
+    });
+    html += '</div>';
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    html += '<div class="content">';
+    var list = bookingsForDay();
+    var wordForms = list.length === 1 ? "запись" : "записей";
+    html += '<div class="day-summary">' + list.length + ' ' + wordForms + ' на ' + esc(fmtDateLabel(state.selectedDate)) + '</div>';
+
+    if (list.length === 0) {
+      html += '<div class="empty-state">🔧<br/>На этот день пока нет записей</div>';
+    }
+
+    list.forEach(function (b) {
+      var s = STATUS[b.status] || STATUS.planned;
+      html += '<div class="ticket" style="border-left:5px solid ' + s.color + ';">';
+      html += '<div class="ticket-body">';
+      html += '<div class="ticket-top">';
+      html += '<div class="ticket-time mono">🕐 ' + esc(b.time) + '</div>';
+      html += '<button class="status-pill" style="background:' + s.bg + ';color:' + s.color + ';" onclick="__app.cycleStatus(\'' + b.id + '\')">' + esc(s.label) + '</button>';
+      html += '</div>';
+      html += '<div class="ticket-name">' + esc(b.clientName) + '</div>';
+      html += '<div class="ticket-meta">';
+      if (b.phone) html += '<span>📞 ' + esc(b.phone) + '</span>';
+      if (b.car) html += '<span>🚗 ' + esc(b.car) + (b.plate ? ' · ' + esc(b.plate) : '') + '</span>';
+      if (b.master) html += '<span>👤 ' + esc(b.master) + '</span>';
+      html += '</div>';
+      if (b.service) html += '<div class="ticket-service">' + esc(b.service) + '</div>';
+      html += '<div class="ticket-actions">';
+      html += '<button class="link-btn" style="color:#14555A;" onclick="__app.openEditForm(\'' + b.id + '\')">Изменить</button>';
+      html += '<button class="link-btn" style="color:#B8452F;" onclick="__app.deleteBooking(\'' + b.id + '\')">Удалить</button>';
+      html += '</div></div></div>';
+    });
+
+    html += '</div>';
+    return html;
+  }
+
+  function renderClients() {
+    var html = '<div class="content">';
+    html += '<div class="search-box">🔎 <input placeholder="Поиск по имени или телефону" value="' + esc(state.search) + '" oninput="__app.setSearch(this.value)"/></div>';
+
+    var list = clientList();
+    if (list.length === 0) {
+      html += '<div class="empty-state">👤<br/>Клиенты появятся здесь после первой записи</div>';
+    }
+
+    list.forEach(function (c) {
+      var open = state.openClientKey === c.key;
+      html += '<div class="client-card">';
+      html += '<button class="client-head" onclick="__app.toggleClient(\'' + c.key.replace(/'/g, "\\'") + '\')">';
+      html += '<div><div class="client-name">' + esc(c.name) + '</div>';
+      html += '<div class="client-sub">' + esc(c.phone || "без телефона") + ' · ' + c.bookings.length + (c.bookings.length === 1 ? ' визит' : ' визита') + '</div>';
+      if (c.cars.length) html += '<div class="client-cars">🚗 ' + esc(c.cars.join(", ")) + '</div>';
+      html += '</div><div>📜</div></button>';
+      if (open) {
+        html += '<div class="client-history">';
+        c.bookings.forEach(function (b) {
+          var s = STATUS[b.status] || STATUS.planned;
+          html += '<div class="history-row"><div><span class="mono" style="color:#5C645C;">' + esc(b.date) + ' ' + esc(b.time) + '</span> ' + esc(b.service || "—") + '</div>';
+          html += '<span class="status-pill" style="background:' + s.bg + ';color:' + s.color + ';">' + esc(s.label) + '</span></div>';
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+
+    html += '</div>';
+    return html;
+  }
+
+  function renderForm() {
+    var masters = state.data.masters;
+    var f = state.editBooking;
+    var html = '<div class="modal-backdrop"><div class="modal">';
+    html += '<div class="modal-head"><div class="modal-title">' + (f ? "Изменить запись" : "Новая запись") + '</div>';
+    html += '<button class="close-btn" onclick="__app.closeForm()">✕</button></div>';
+
+    html += '<div class="field-row">';
+    html += '<div class="field"><label>Дата</label><input id="f_date" type="date" class="input"/></div>';
+    html += '<div class="field"><label>Время</label><input id="f_time" type="time" class="input"/></div>';
+    html += '</div>';
+
+    html += '<div class="field"><label>Имя клиента *</label><input id="f_clientName" class="input" placeholder="Например, Дмитрий"/></div>';
+    html += '<div class="field"><label>Телефон</label><input id="f_phone" class="input" placeholder="+7 900 000-00-00"/></div>';
+
+    html += '<div class="field-row">';
+    html += '<div class="field"><label>Автомобиль</label><input id="f_car" class="input" placeholder="Toyota Camry"/></div>';
+    html += '<div class="field"><label>Гос. номер</label><input id="f_plate" class="input" placeholder="А123ВС"/></div>';
+    html += '</div>';
+
+    html += '<div class="field"><label>Услуга / работа</label><textarea id="f_service" class="input" rows="2" placeholder="Замена масла, диагностика подвески…"></textarea></div>';
+
+    html += '<div class="field"><label>Мастер</label><div class="chip-row" id="masterChips">';
+    masters.forEach(function (m) {
+      html += '<button type="button" class="chip" data-master="' + esc(m) + '" onclick="__app.pickMaster(\'' + m.replace(/'/g, "\\'") + '\')">' + esc(m) + '</button>';
+    });
+    html += '</div>';
+    html += '<input type="hidden" id="f_master" value=""/>';
+    html += '<div class="add-master-row"><input id="f_newMaster" class="input" placeholder="Добавить мастера"/><button type="button" class="add-btn" onclick="__app.addMaster()">+</button></div>';
+    html += '</div>';
+
+    html += '<div class="field"><label>Статус</label><div class="chip-row" id="statusChips">';
+    STATUS_ORDER.forEach(function (k) {
+      var s = STATUS[k];
+      html += '<button type="button" class="status-chip" data-status="' + k + '" style="background:' + s.bg + ';color:' + s.color + ';" onclick="__app.pickStatus(\'' + k + '\')">' + esc(s.label) + '</button>';
+    });
+    html += '</div><input type="hidden" id="f_status" value=""/></div>';
+
+    html += '<button class="save-btn" onclick="__app.saveForm()">✓ Сохранить запись</button>';
+    html += '</div></div>';
+    return html;
+  }
+
+  function setFormValues(f) {
+    var g = function (id) { return document.getElementById(id); };
+    g("f_date").value = f ? f.date : state.selectedDate;
+    g("f_time").value = f ? f.time : "10:00";
+    g("f_clientName").value = f ? f.clientName : "";
+    g("f_phone").value = f ? f.phone : "";
+    g("f_car").value = f ? f.car : "";
+    g("f_plate").value = f ? f.plate : "";
+    g("f_service").value = f ? f.service : "";
+    var master = f ? f.master : (state.data.masters[0] || "");
+    var status = f ? f.status : "planned";
+    g("f_master").value = master;
+    g("f_status").value = status;
+    highlightChip("masterChips", "data-master", master);
+    highlightChip("statusChips", "data-status", status, true);
+  }
+
+  function highlightChip(containerId, attr, value, isStatus) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var chips = container.querySelectorAll("[" + attr + "]");
+    chips.forEach(function (chip) {
+      var match = chip.getAttribute(attr) === value;
+      if (isStatus) {
+        var k = chip.getAttribute(attr);
+        var s = STATUS[k];
+        chip.style.background = match ? s.color : s.bg;
+        chip.style.color = match ? "#fff" : s.color;
+      } else {
+        chip.classList.toggle("selected", match);
+      }
+    });
+  }
+
+  init();
+})();
 </script>
 </body>
 </html>
