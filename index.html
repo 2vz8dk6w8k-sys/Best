@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>АвтоСервис · Записи</title>
+<title>Best · Mercedes-Benz Service</title>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -14,85 +14,102 @@
 
 <style>
   * { box-sizing: border-box; }
-  html, body { margin:0; padding:0; background:#EEF1ED; color:#1B2320;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  html, body { margin:0; padding:0; background:#EDEEF0; color:#17181B;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; letter-spacing:-0.01em; }
   .mono { font-family: "SFMono-Regular", Menlo, Consolas, monospace; }
   .hidden { display:none !important; }
 
-  .header { position: sticky; top:0; z-index:20; background:#1B2320; padding:14px 16px 0; }
-  .header-title { color:#fff; font-weight:700; font-size:18px; display:flex; align-items:center; gap:8px; }
-  .tabs { display:flex; gap:4px; margin-top:10px; }
-  .tab-btn { border:none; background:transparent; color:#B7BEB6; font-weight:600; font-size:14px;
-    padding:10px 14px; border-radius:10px 10px 0 0; cursor:pointer; }
-  .tab-btn.active { background:#EEF1ED; color:#1B2320; }
+  .header {
+    position: sticky; top:0; z-index:20; padding:16px 16px 0;
+    background:
+      repeating-linear-gradient(100deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 4px),
+      linear-gradient(160deg, #24262A 0%, #101113 60%, #0A0A0B 100%);
+    border-bottom: 1px solid #B4102E;
+  }
+  .header-top { display:flex; align-items:center; gap:10px; }
+  .badge {
+    width:32px; height:32px; border-radius:999px; flex-shrink:0;
+    background: linear-gradient(145deg, #E7E9EC, #9CA3AB 55%, #6E747B);
+    color:#16171A; font-weight:800; font-size:15px; display:flex; align-items:center; justify-content:center;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.4);
+  }
+  .header-title { color:#fff; font-weight:700; font-size:17px; text-transform:uppercase; letter-spacing:0.06em; line-height:1.1; }
+  .header-sub { color:#8D9299; font-size:10px; text-transform:uppercase; letter-spacing:0.14em; margin-top:1px; }
+  .tabs { display:flex; gap:4px; margin-top:14px; }
+  .tab-btn { border:none; background:transparent; color:#8D9299; font-weight:600; font-size:13px;
+    text-transform:uppercase; letter-spacing:0.04em;
+    padding:10px 14px; border-radius:8px 8px 0 0; cursor:pointer; }
+  .tab-btn.active { background:#EDEEF0; color:#17181B; }
 
-  .err-banner { text-align:center; font-size:12px; padding:8px; background:#B8452F; color:#fff; }
+  .err-banner { text-align:center; font-size:12px; padding:8px; background:#B4102E; color:#fff; }
 
-  .day-strip { display:flex; gap:8px; overflow-x:auto; padding:12px 16px; background:#fff; border-bottom:1px solid #D8DDD6; }
-  .day-btn { flex-shrink:0; padding:8px 12px; border-radius:12px; font-size:12px; font-weight:600;
-    text-align:center; min-width:62px; background:#F5F6F3; color:#4B534B; border:1.5px solid transparent; }
-  .day-btn.selected { background:#14555A; color:#fff; }
-  .day-btn.today:not(.selected) { border-color:#E2900A; }
+  .day-strip { display:flex; gap:8px; overflow-x:auto; padding:12px 16px; background:#fff; border-bottom:1px solid #DEE0E3; }
+  .day-btn { flex-shrink:0; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:600;
+    text-align:center; min-width:62px; background:#F2F3F4; color:#54585D; border:1.5px solid transparent; }
+  .day-btn.selected { background:#1B1C1F; color:#fff; }
+  .day-btn.today:not(.selected) { border-color:#B4102E; color:#B4102E; }
 
   .content { padding:16px; padding-bottom:96px; }
-  .day-summary { font-weight:600; font-size:14px; color:#5C645C; margin-bottom:12px; }
+  .day-summary { font-weight:600; font-size:13px; color:#63676C; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.04em; }
 
-  .empty-state { text-align:center; padding:56px 16px; border-radius:16px; background:#fff; border:1px dashed #C7CDC4; color:#9AA39C; font-size:14px; }
+  .empty-state { text-align:center; padding:56px 16px; border-radius:14px; background:#fff; border:1px dashed #C9CCCF; color:#9A9EA2; font-size:14px; }
 
-  .ticket { position:relative; margin-left:8px; border-radius:4px 16px 16px 4px; overflow:hidden;
-    background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; }
+  .ticket { position:relative; margin-left:8px; border-radius:3px 14px 14px 3px; overflow:hidden;
+    background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; border:1px solid #E4E5E7; border-left-width:0; }
   .ticket::before, .ticket::after { content:''; position:absolute; left:-9px; width:18px; height:18px;
-    border-radius:999px; background:#EEF1ED; z-index:2; }
+    border-radius:999px; background:#EDEEF0; z-index:2; }
   .ticket::before { top:-9px; } .ticket::after { bottom:-9px; }
   .ticket-body { padding:16px; }
   .ticket-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
-  .ticket-time { display:flex; align-items:center; gap:6px; font-weight:600; font-size:18px; }
-  .status-pill { border:none; font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; cursor:pointer; }
-  .ticket-name { margin-top:8px; font-weight:600; font-size:16px; }
-  .ticket-meta { margin-top:4px; display:flex; flex-wrap:wrap; gap-column:16px; font-size:13px; color:#5C645C; }
+  .ticket-time { display:flex; align-items:center; gap:6px; font-weight:700; font-size:18px; color:#17181B; }
+  .status-pill { border:none; font-size:11px; font-weight:700; padding:4px 10px; border-radius:999px; cursor:pointer; text-transform:uppercase; letter-spacing:0.03em; }
+  .ticket-name { margin-top:8px; font-weight:700; font-size:16px; }
+  .ticket-meta { margin-top:4px; display:flex; flex-wrap:wrap; gap-column:16px; font-size:13px; color:#63676C; }
   .ticket-meta span { margin-right:14px; }
   .ticket-service { margin-top:8px; font-size:14px; }
   .ticket-actions { margin-top:12px; display:flex; gap:14px; }
-  .link-btn { border:none; background:none; font-weight:600; font-size:12px; cursor:pointer; padding:0; }
+  .link-btn { border:none; background:none; font-weight:700; font-size:12px; cursor:pointer; padding:0; text-transform:uppercase; letter-spacing:0.03em; }
 
   .search-box { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:12px;
-    background:#fff; border:1px solid #D8DDD6; margin-bottom:16px; }
+    background:#fff; border:1px solid #DEE0E3; margin-bottom:16px; }
   .search-box input { border:none; outline:none; flex:1; font-size:14px; background:transparent; }
 
-  .client-card { border-radius:16px; overflow:hidden; background:#fff; border:1px solid #D8DDD6; margin-bottom:8px; }
+  .client-card { border-radius:14px; overflow:hidden; background:#fff; border:1px solid #E4E5E7; margin-bottom:8px; }
   .client-head { width:100%; text-align:left; padding:14px; background:none; border:none; cursor:pointer;
     display:flex; align-items:center; justify-content:space-between; }
-  .client-name { font-weight:600; }
-  .client-sub { font-size:12px; color:#8A928A; margin-top:2px; }
-  .client-cars { font-size:12px; color:#5C645C; margin-top:4px; }
-  .client-history { padding:0 14px 14px; border-top:1px solid #EEF1ED; }
+  .client-name { font-weight:700; }
+  .client-sub { font-size:12px; color:#8D9299; margin-top:2px; }
+  .client-cars { font-size:12px; color:#63676C; margin-top:4px; }
+  .client-history { padding:0 14px 14px; border-top:1px solid #EDEEF0; }
   .history-row { display:flex; align-items:center; justify-content:space-between; font-size:13px; padding-top:8px; }
 
   .fab { position:fixed; bottom:24px; right:24px; width:56px; height:56px; border-radius:999px; border:none;
-    background:#E2900A; color:#1B2320; font-size:28px; font-weight:700; box-shadow:0 4px 10px rgba(0,0,0,0.25); cursor:pointer; z-index:30; }
+    background:linear-gradient(150deg, #D4142F, #8E0C21); color:#fff; font-size:28px; font-weight:700;
+    box-shadow:0 4px 12px rgba(180,16,46,0.45); cursor:pointer; z-index:30; }
 
-  .modal-backdrop { position:fixed; inset:0; background:rgba(27,35,32,0.55); z-index:40; display:flex;
+  .modal-backdrop { position:fixed; inset:0; background:rgba(10,10,11,0.6); z-index:40; display:flex;
     align-items:flex-end; justify-content:center; }
-  .modal { width:100%; max-width:480px; max-height:92vh; overflow-y:auto; background:#EEF1ED;
-    border-radius:24px 24px 0 0; padding:20px; }
+  .modal { width:100%; max-width:480px; max-height:92vh; overflow-y:auto; background:#EDEEF0;
+    border-radius:20px 20px 0 0; padding:20px; }
   .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
-  .modal-title { font-weight:700; font-size:18px; }
-  .close-btn { border:none; background:none; font-size:20px; color:#5C645C; cursor:pointer; }
+  .modal-title { font-weight:700; font-size:17px; text-transform:uppercase; letter-spacing:0.04em; }
+  .close-btn { border:none; background:none; font-size:20px; color:#63676C; cursor:pointer; }
   .field { margin-bottom:12px; }
-  .field label { display:block; font-size:12px; font-weight:600; color:#5C645C; margin-bottom:4px; }
+  .field label { display:block; font-size:11px; font-weight:700; color:#63676C; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.05em; }
   .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  .input { width:100%; background:#fff; border:1px solid #D8DDD6; border-radius:10px; padding:9px 12px; font-size:14px; outline:none; font-family:inherit; }
-  .input:focus { border-color:#14555A; }
+  .input { width:100%; background:#fff; border:1px solid #DEE0E3; border-radius:9px; padding:9px 12px; font-size:14px; outline:none; font-family:inherit; }
+  .input:focus { border-color:#1B1C1F; }
   .chip-row { display:flex; flex-wrap:wrap; gap:8px; }
-  .chip { padding:6px 12px; border-radius:999px; font-size:13px; border:1px solid #D8DDD6; background:#fff; color:#1B2320; cursor:pointer; }
-  .chip.selected { background:#14555A; color:#fff; border-color:#14555A; }
-  .status-chip { padding:6px 12px; border-radius:999px; font-size:12px; font-weight:600; border:none; cursor:pointer; }
+  .chip { padding:6px 12px; border-radius:999px; font-size:13px; border:1px solid #DEE0E3; background:#fff; color:#17181B; cursor:pointer; }
+  .chip.selected { background:#1B1C1F; color:#fff; border-color:#1B1C1F; }
+  .status-chip { padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700; border:none; cursor:pointer; text-transform:uppercase; letter-spacing:0.03em; }
   .add-master-row { display:flex; gap:8px; margin-top:8px; }
   .add-master-row .input { flex:1; }
-  .add-btn { padding:0 12px; border-radius:10px; font-weight:600; background:#fff; border:1px solid #D8DDD6; cursor:pointer; }
-  .save-btn { width:100%; margin-top:16px; padding:12px; border-radius:12px; font-weight:700; border:none;
-    color:#fff; background:#14555A; cursor:pointer; font-size:15px; }
-  .save-btn:disabled { background:#C7CDC4; }
+  .add-btn { padding:0 12px; border-radius:9px; font-weight:700; background:#fff; border:1px solid #DEE0E3; cursor:pointer; }
+  .save-btn { width:100%; margin-top:16px; padding:13px; border-radius:11px; font-weight:700; border:none;
+    color:#fff; background:linear-gradient(150deg, #26282C, #101113); cursor:pointer; font-size:14px;
+    text-transform:uppercase; letter-spacing:0.05em; }
+  .save-btn:disabled { background:#C9CCCF; }
 
   .center-screen { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 24px; text-align:center; }
 </style>
@@ -124,10 +141,10 @@
   "use strict";
 
   var STATUS = {
-    planned:  { label: "Запланировано", color: "#E2900A", bg: "#FDF3E1" },
-    progress: { label: "В работе",      color: "#14555A", bg: "#E4EEEE" },
-    done:     { label: "Готово",        color: "#4C7A5E", bg: "#E9F1EA" },
-    cancelled:{ label: "Отменено",      color: "#9AA39C", bg: "#F0F1EE" }
+    planned:  { label: "Запланировано", color: "#5B6873", bg: "#EBEDEF" },
+    progress: { label: "В работе",      color: "#B4102E", bg: "#FBE9EB" },
+    done:     { label: "Готово",        color: "#33654C", bg: "#E7F0EA" },
+    cancelled:{ label: "Отменено",      color: "#9DA3A8", bg: "#F1F2F2" }
   };
   var STATUS_ORDER = ["planned", "progress", "done", "cancelled"];
 
@@ -245,8 +262,8 @@
       if (!key) return;
       if (!map[key]) map[key] = { name: b.clientName, phone: b.phone, cars: [], bookings: [] };
       map[key].bookings.push(b);
-      if (b.car) {
-        var carStr = b.car + (b.plate ? " · " + b.plate : "");
+      if (b.car || b.brand) {
+        var carStr = ((b.brand ? b.brand + " " : "") + (b.car || "")).trim() + (b.plate ? " · " + b.plate : "") + (b.vin ? " · VIN " + b.vin : "");
         if (map[key].cars.indexOf(carStr) === -1) map[key].cars.push(carStr);
       }
     });
@@ -300,6 +317,10 @@
       persist(Object.assign({}, state.data, { bookings: bookings }));
       state.showForm = false; state.editBooking = null; render();
     },
+    pickBrand: function (b) {
+      document.getElementById("f_brand").value = b;
+      highlightChip("brandChips", "data-brand", b);
+    },
     pickMaster: function (m) {
       document.getElementById("f_master").value = m;
       highlightChip("masterChips", "data-master", m);
@@ -336,6 +357,8 @@
       phone: g("f_phone").value,
       car: g("f_car").value,
       plate: g("f_plate").value,
+      brand: g("f_brand").value,
+      vin: g("f_vin").value.toUpperCase(),
       service: g("f_service").value,
       master: g("f_master").value,
       status: g("f_status").value
@@ -357,7 +380,7 @@
 
     var html = "";
     html += '<div class="header">';
-    html += '<div class="header-title">🔧 АвтоСервис · Записи</div>';
+    html += '<div class="header-top"><div class="badge">B</div><div><div class="header-title">Best</div><div class="header-sub">Mercedes-Benz Service</div></div></div>';
     html += '<div class="tabs">';
     html += '<button class="tab-btn ' + (state.view === "calendar" ? "active" : "") + '" onclick="__app.setView(\'calendar\')">Календарь</button>';
     html += '<button class="tab-btn ' + (state.view === "clients" ? "active" : "") + '" onclick="__app.setView(\'clients\')">Клиенты</button>';
@@ -420,7 +443,11 @@
       html += '<div class="ticket-name">' + esc(b.clientName) + '</div>';
       html += '<div class="ticket-meta">';
       if (b.phone) html += '<span>📞 ' + esc(b.phone) + '</span>';
-      if (b.car) html += '<span>🚗 ' + esc(b.car) + (b.plate ? ' · ' + esc(b.plate) : '') + '</span>';
+      if (b.car || b.brand) {
+        var carLabel = (b.brand ? b.brand + " " : "") + (b.car || "");
+        html += '<span>🚗 ' + esc(carLabel.trim()) + (b.plate ? ' · ' + esc(b.plate) : '') + '</span>';
+      }
+      if (b.vin) html += '<span class="mono">VIN ' + esc(b.vin) + '</span>';
       if (b.master) html += '<span>👤 ' + esc(b.master) + '</span>';
       html += '</div>';
       if (b.service) html += '<div class="ticket-service">' + esc(b.service) + '</div>';
@@ -482,10 +509,17 @@
     html += '<div class="field"><label>Имя клиента *</label><input id="f_clientName" class="input" placeholder="Например, Дмитрий"/></div>';
     html += '<div class="field"><label>Телефон</label><input id="f_phone" class="input" placeholder="+7 900 000-00-00"/></div>';
 
+    html += '<div class="field"><label>Марка</label><div class="chip-row" id="brandChips">';
+    ["Mercedes", "Toyota", "BMW", "Другое"].forEach(function (br) {
+      html += '<button type="button" class="chip" data-brand="' + esc(br) + '" onclick="__app.pickBrand(\'' + br + '\')">' + esc(br) + '</button>';
+    });
+    html += '</div><input type="hidden" id="f_brand" value=""/></div>';
+
     html += '<div class="field-row">';
-    html += '<div class="field"><label>Автомобиль</label><input id="f_car" class="input" placeholder="Toyota Camry"/></div>';
+    html += '<div class="field"><label>Модель</label><input id="f_car" class="input" placeholder="Например, C-Class W205"/></div>';
     html += '<div class="field"><label>Гос. номер</label><input id="f_plate" class="input" placeholder="А123ВС"/></div>';
     html += '</div>';
+    html += '<div class="field"><label>VIN</label><input id="f_vin" class="input" placeholder="WDD..." style="text-transform:uppercase;"/></div>';
 
     html += '<div class="field"><label>Услуга / работа</label><textarea id="f_service" class="input" rows="2" placeholder="Замена масла, диагностика подвески…"></textarea></div>';
 
@@ -518,6 +552,10 @@
     g("f_phone").value = f ? f.phone : "";
     g("f_car").value = f ? f.car : "";
     g("f_plate").value = f ? f.plate : "";
+    g("f_vin").value = f ? (f.vin || "") : "";
+    var brand = f ? (f.brand || "") : "";
+    g("f_brand").value = brand;
+    highlightChip("brandChips", "data-brand", brand);
     g("f_service").value = f ? f.service : "";
     var master = f ? f.master : (state.data.masters[0] || "");
     var status = f ? f.status : "planned";
