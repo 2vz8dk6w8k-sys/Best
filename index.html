@@ -370,7 +370,21 @@
     var formWasOpen = !!document.getElementById("f_clientName");
     if (state.showForm) html += renderForm();
 
+    var active = document.activeElement;
+    var activeId = active && active.id;
+    var selStart = active && typeof active.selectionStart === "number" ? active.selectionStart : null;
+
     root.innerHTML = html;
+
+    if (activeId) {
+      var toFocus = document.getElementById(activeId);
+      if (toFocus) {
+        toFocus.focus();
+        if (selStart !== null && typeof toFocus.setSelectionRange === "function") {
+          try { toFocus.setSelectionRange(selStart, selStart); } catch (e) {}
+        }
+      }
+    }
 
     if (state.showForm && !formWasOpen) {
       setFormValues(state.editBooking);
@@ -422,7 +436,7 @@
 
   function renderClients() {
     var html = '<div class="content">';
-    html += '<div class="search-box">🔎 <input placeholder="Поиск по имени или телефону" value="' + esc(state.search) + '" oninput="__app.setSearch(this.value)"/></div>';
+    html += '<div class="search-box">🔎 <input id="clientSearchInput" placeholder="Поиск по имени или телефону" value="' + esc(state.search) + '" oninput="__app.setSearch(this.value)"/></div>';
 
     var list = clientList();
     if (list.length === 0) {
