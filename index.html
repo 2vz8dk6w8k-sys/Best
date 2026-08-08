@@ -185,6 +185,14 @@
     cancelled:{ label: "Отменено",      color: "#9DA3A8", bg: "#F1F2F2" }
   };
   var STATUS_ORDER = ["planned", "progress", "done", "cancelled"];
+  var TASK_LIST = [
+    "ТО", "Замена масла ДВС", "Замена масла АКПП", "Замена масла в редукторе",
+    "Замена тормозных колодок", "Замена тормозных дисков", "Замена сайлентблоков",
+    "Замена амортизаторов", "Развал-схождение", "Диагностика ходовой",
+    "Компьютерная диагностика", "Замена ремня/цепи ГРМ", "Замена свечей",
+    "Замена воздушного фильтра", "Замена салонного фильтра"
+  ];
+  var MAX_PHOTOS = 6;
 
   var root = document.getElementById("app");
   var state = {
@@ -196,10 +204,13 @@
     search: "",
     openClientKey: null,
     showForm: false,
-    editBooking: null
+    editBooking: null,
+    formPhotos: [],
+    formTasks: []
   };
 
-  var db = null, docRef = null, saveTimer = null, skipNextSnapshot = false, loadTimeout = null;
+  var db = null, bookingsRef = null, metaRef = null, loadTimeout = null;
+  var metaLoaded = false, bookingsLoaded = false;
 
   function todayStr() {
     var d = new Date();
@@ -217,11 +228,20 @@
   }
   function defaultData() { return { bookings: [], masters: ["Иван", "Сергей", "Алексей"] }; }
 
+  function checkReady() {
+    if (metaLoaded && bookingsLoaded) {
+      clearTimeout(loadTimeout);
+      state.phase = "ready";
+      render();
+    }
+  }
+
   function init() {
     try {
       firebase.initializeApp(firebaseConfig);
       db = firebase.firestore();
-      docRef = db.collection("garage").doc("shared-data");
+      bookingsRef = db.collection("garage-bookings");
+      metaRef = db.collection("garage-meta").doc("info");
     } catch (e) {
       state.phase = "error";
       state.errorMsg = "Не удалось инициализировать Firebase. Проверь firebaseConfig в коде файла.";
@@ -229,51 +249,64 @@
       return;
     }
 
+    state.data = defaultData();
+
     loadTimeout = setTimeout(function () {
       state.phase = "error";
       state.errorMsg = "Нет ответа от базы данных дольше 10 секунд. Возможно: 1) не создана Firestore Database в консоли Firebase, 2) сеть блокирует доступ к серверам Google (попробуй другой Wi-Fi/интернет), 3) в правилах Firestore не нажали Publish.";
-      state.data = defaultData();
       render();
     }, 10000);
 
-    docRef.onSnapshot(function (snap) {
-      clearTimeout(loadTimeout);
-      if (skipNextSnapshot) { skipNextSnapshot = false; return; }
-      if (snap.exists) {
-        try {
-          var payload = snap.data().payload;
-          state.data = payload ? JSON.parse(payload) : defaultData();
-        } catch (e) {
-          state.data = defaultData();
-        }
-      } else {
-        state.data = defaultData();
+    metaRef.onSnapshot(function (snap) {
+      if (snap.exists && snap.data().masters) {
+        state.data.masters = snap.data().masters;
       }
-      state.phase = "ready";
-      render();
+      metaLoaded = true;
+      if (state.phase === "ready") render(); else checkReady();
+    }, function (err) {
+      metaLoaded = true;
+      checkReady();
+    });
+
+    bookingsRef.onSnapshot(function (snap) {
+      var bookings = [];
+      snap.forEach(function (doc) {
+        var d = doc.data();
+        d.id = doc.id;
+        bookings.push(d);
+      });
+      state.data.bookings = bookings;
+      bookingsLoaded = true;
+      if (state.phase === "ready") render(); else checkReady();
     }, function (err) {
       clearTimeout(loadTimeout);
       state.phase = "error";
       state.errorMsg = "Ошибка доступа к базе: " + (err && err.message ? err.message : err) + ". Проверь правила безопасности Firestore (вкладка Rules) — должно быть allow read, write: if true; и нажат Publish.";
-      state.data = defaultData();
       render();
     });
 
     render();
   }
 
-  function persist(next) {
-    state.data = next;
-    render();
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
-      skipNextSnapshot = true;
-      docRef.set({ payload: JSON.stringify(next) }).catch(function () {
-        state.phase = "error";
-        state.errorMsg = "Не удалось сохранить изменения — проверь соединение.";
-        render();
-      });
-    }, 300);
+  function saveBookingToFirestore(booking) {
+    var id = booking.id;
+    var payload = Object.assign({}, booking);
+    delete payload.id;
+    bookingsRef.doc(id).set(payload).catch(function () {
+      state.phase = "error";
+      state.errorMsg = "Не удалось сохранить запись — проверь соединение. Возможно, фото слишком большие (уменьши количество).";
+      render();
+    });
+  }
+  function deleteBookingFromFirestore(id) {
+    bookingsRef.doc(id).delete().catch(function () {
+      state.phase = "error";
+      state.errorMsg = "Не удалось удалить запись — проверь соединение.";
+      render();
+    });
+  }
+  function saveMasters(masters) {
+    metaRef.set({ masters: masters }, { merge: true }).catch(function () {});
   }
 
   function dayStrip() {
@@ -328,32 +361,43 @@
     setSearch: function (v) { state.search = v; render(); },
     toggleClient: function (key) { state.openClientKey = (state.openClientKey === key) ? null : key; render(); },
     cycleStatus: function (id) {
-      var bookings = state.data.bookings.map(function (b) {
-        if (b.id !== id) return b;
-        var idx = STATUS_ORDER.indexOf(b.status);
-        var next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
-        return Object.assign({}, b, { status: next });
-      });
-      persist(Object.assign({}, state.data, { bookings: bookings }));
+      var b = state.data.bookings.filter(function (x) { return x.id === id; })[0];
+      if (!b) return;
+      var idx = STATUS_ORDER.indexOf(b.status);
+      var next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
+      var updated = Object.assign({}, b, { status: next });
+      state.data.bookings = state.data.bookings.map(function (x) { return x.id === id ? updated : x; });
+      render();
+      saveBookingToFirestore(updated);
     },
     deleteBooking: function (id) {
-      var bookings = state.data.bookings.filter(function (b) { return b.id !== id; });
-      persist(Object.assign({}, state.data, { bookings: bookings }));
+      state.data.bookings = state.data.bookings.filter(function (b) { return b.id !== id; });
+      render();
+      deleteBookingFromFirestore(id);
     },
-    openNewForm: function () { state.editBooking = null; state.showForm = true; render(); },
+    openNewForm: function () {
+      state.editBooking = null; state.showForm = true;
+      state.formPhotos = []; state.formTasks = [];
+      render();
+    },
     openEditForm: function (id) {
-      state.editBooking = state.data.bookings.filter(function (b) { return b.id === id; })[0] || null;
+      var b = state.data.bookings.filter(function (x) { return x.id === id; })[0] || null;
+      state.editBooking = b;
+      state.formPhotos = (b && b.photos) ? b.photos.slice() : [];
+      state.formTasks = (b && b.tasks) ? b.tasks.slice() : [];
       state.showForm = true; render();
     },
     closeForm: function () { state.showForm = false; state.editBooking = null; render(); },
     saveForm: function () {
       var f = readForm();
       if (!f.clientName.trim() || !f.date || !f.time) return;
-      var bookings = state.data.bookings.slice();
-      var idx = bookings.findIndex(function (b) { return b.id === f.id; });
-      if (idx >= 0) bookings[idx] = f; else bookings.push(f);
-      persist(Object.assign({}, state.data, { bookings: bookings }));
-      state.showForm = false; state.editBooking = null; render();
+      var exists = state.data.bookings.some(function (b) { return b.id === f.id; });
+      state.data.bookings = exists
+        ? state.data.bookings.map(function (b) { return b.id === f.id ? f : b; })
+        : state.data.bookings.concat([f]);
+      state.showForm = false; state.editBooking = null;
+      render();
+      saveBookingToFirestore(f);
     },
     pickBrand: function (b) {
       document.getElementById("f_brand").value = b;
@@ -368,8 +412,8 @@
       var name = input.value.trim();
       if (!name) return;
       var masters = state.data.masters.concat([name]);
-      state.data = Object.assign({}, state.data, { masters: masters });
-      docRef.set({ payload: JSON.stringify(state.data) }).catch(function(){});
+      state.data.masters = masters;
+      saveMasters(masters);
       var chipsHtml = document.getElementById("masterChips").innerHTML;
       chipsHtml += '<button type="button" class="chip selected" data-master="' + esc(name) + '" onclick="__app.pickMaster(\'' + name.replace(/'/g, "\\'") + '\')">' + esc(name) + '</button>';
       document.getElementById("masterChips").innerHTML = chipsHtml;
@@ -381,8 +425,86 @@
       document.getElementById("f_status").value = k;
       highlightChip("statusChips", "data-status", k, true);
     },
+    toggleTask: function (t) {
+      var idx = state.formTasks.indexOf(t);
+      if (idx === -1) state.formTasks.push(t); else state.formTasks.splice(idx, 1);
+      highlightMultiChip("taskChips", "data-task", state.formTasks);
+    },
+    handlePhotoFiles: function (input) {
+      var files = Array.prototype.slice.call(input.files || []);
+      input.value = "";
+      if (!files.length) return;
+      var room = MAX_PHOTOS - state.formPhotos.length;
+      if (room <= 0) { renderPhotoNotice("Максимум " + MAX_PHOTOS + " фото на запись."); return; }
+      files = files.slice(0, room);
+      files.forEach(function (file) {
+        compressImage(file, function (dataUrl) {
+          if (dataUrl) {
+            state.formPhotos.push(dataUrl);
+            renderPhotoStrip();
+          }
+        });
+      });
+    },
+    removePhoto: function (idx) {
+      state.formPhotos.splice(idx, 1);
+      renderPhotoStrip();
+    },
+    openPhoto: function (idx) {
+      var w = window.open();
+      if (w) w.document.write('<img src="' + state.formPhotos[idx] + '" style="max-width:100%;">');
+    },
+    openTicketPhoto: function (bookingId, idx) {
+      var b = state.data.bookings.filter(function (x) { return x.id === bookingId; })[0];
+      if (!b || !b.photos || !b.photos[idx]) return;
+      var w = window.open();
+      if (w) w.document.write('<img src="' + b.photos[idx] + '" style="max-width:100%;">');
+    },
     onFormFieldChange: function () { /* no-op, values read on save */ }
   };
+
+  function compressImage(file, cb) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        var maxDim = 1000;
+        var w = img.width, h = img.height;
+        if (w > h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else if (h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
+        var canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        try {
+          cb(canvas.toDataURL("image/jpeg", 0.6));
+        } catch (err) { cb(null); }
+      };
+      img.onerror = function () { cb(null); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function () { cb(null); };
+    reader.readAsDataURL(file);
+  }
+
+  function renderPhotoNotice(msg) {
+    var el = document.getElementById("photoNotice");
+    if (el) el.textContent = msg;
+  }
+
+  function renderPhotoStrip() {
+    var strip = document.getElementById("photoStrip");
+    if (!strip) return;
+    var html = "";
+    state.formPhotos.forEach(function (src, i) {
+      html += '<div style="position:relative;flex-shrink:0;">' +
+        '<img src="' + src + '" onclick="__app.openPhoto(' + i + ')" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #DEE0E3;cursor:pointer;"/>' +
+        '<button type="button" onclick="__app.removePhoto(' + i + ')" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:999px;border:none;background:#1B1C1F;color:#fff;font-size:12px;line-height:1;cursor:pointer;">✕</button>' +
+        '</div>';
+    });
+    strip.innerHTML = html;
+    renderPhotoNotice(state.formPhotos.length >= MAX_PHOTOS ? "Достигнут лимит " + MAX_PHOTOS + " фото." : "");
+  }
 
   function readForm() {
     var g = function (id) { return document.getElementById(id); };
@@ -399,7 +521,9 @@
       vin: g("f_vin").value.toUpperCase(),
       service: g("f_service").value,
       master: g("f_master").value,
-      status: g("f_status").value
+      status: g("f_status").value,
+      tasks: state.formTasks.slice(),
+      photos: state.formPhotos.slice()
     };
   }
 
@@ -450,6 +574,11 @@
     if (state.showForm && !formWasOpen) {
       setFormValues(state.editBooking);
     }
+
+    if (state.view === "calendar") {
+      var selBtn = document.querySelector(".day-btn.selected");
+      if (selBtn) selBtn.scrollIntoView({ behavior: "auto", inline: "center", block: "nearest" });
+    }
   }
 
   function renderCalendar() {
@@ -490,6 +619,16 @@
       if (b.master) html += '<span>👤 ' + esc(b.master) + '</span>';
       html += '</div>';
       if (b.service) html += '<div class="ticket-service">' + esc(b.service) + '</div>';
+      if (b.tasks && b.tasks.length) {
+        html += '<div class="ticket-service" style="color:#63676C;">🔧 ' + esc(b.tasks.join(", ")) + '</div>';
+      }
+      if (b.photos && b.photos.length) {
+        html += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">';
+        b.photos.forEach(function (src, pi) {
+          html += '<img src="' + src + '" onclick="__app.openTicketPhoto(\'' + b.id + '\',' + pi + ')" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #E4E5E7;cursor:pointer;"/>';
+        });
+        html += '</div>';
+      }
       html += '<div class="ticket-actions">';
       html += '<button class="link-btn" style="color:#1B1C1F;" onclick="__app.openEditForm(\'' + b.id + '\')">Изменить</button>';
       html += '<button class="link-btn" style="color:#B4102E;" onclick="__app.deleteBooking(\'' + b.id + '\')">Удалить</button>';
@@ -522,7 +661,9 @@
         html += '<div class="client-history">';
         c.bookings.forEach(function (b) {
           var s = STATUS[b.status] || STATUS.planned;
-          html += '<div class="history-row"><div><span class="mono" style="color:#5C645C;">' + esc(b.date) + ' ' + esc(b.time) + '</span> ' + esc(b.service || "—") + '</div>';
+          var taskLabel = (b.tasks && b.tasks.length) ? b.tasks.join(", ") : (b.service || "—");
+          var photoTag = (b.photos && b.photos.length) ? ' 📷' + b.photos.length : '';
+          html += '<div class="history-row"><div><span class="mono" style="color:#5C645C;">' + esc(b.date) + ' ' + esc(b.time) + '</span> ' + esc(taskLabel) + esc(photoTag) + '</div>';
           html += '<span class="status-pill" style="background:' + s.bg + ';color:' + s.color + ';">' + esc(s.label) + '</span></div>';
         });
         html += '</div>';
@@ -562,6 +703,19 @@
     html += '<div class="field"><label>VIN</label><input id="f_vin" class="input" placeholder="WDD..." style="text-transform:uppercase;"/></div>';
 
     html += '<div class="field"><label>Услуга / работа</label><textarea id="f_service" class="input" rows="2" placeholder="Замена масла, диагностика подвески…"></textarea></div>';
+
+    html += '<div class="field"><label>Работы (можно несколько)</label><div class="chip-row" id="taskChips">';
+    TASK_LIST.forEach(function (t) {
+      html += '<button type="button" class="chip" data-task="' + esc(t) + '" onclick="__app.toggleTask(\'' + t.replace(/'/g, "\\'") + '\')">' + esc(t) + '</button>';
+    });
+    html += '</div></div>';
+
+    html += '<div class="field"><label>Фото</label>';
+    html += '<div id="photoStrip" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>';
+    html += '<input type="file" id="f_photoInput" accept="image/*" multiple capture="environment" style="display:none;" onchange="__app.handlePhotoFiles(this)"/>';
+    html += '<button type="button" class="add-btn" style="width:100%;padding:9px;" onclick="document.getElementById(\'f_photoInput\').click()">📷 Добавить фото</button>';
+    html += '<div id="photoNotice" style="font-size:11px;color:#9A9EA2;margin-top:4px;"></div>';
+    html += '</div>';
 
     html += '<div class="field"><label>Мастер</label><div class="chip-row" id="masterChips">';
     masters.forEach(function (m) {
@@ -603,6 +757,8 @@
     g("f_status").value = status;
     highlightChip("masterChips", "data-master", master);
     highlightChip("statusChips", "data-status", status, true);
+    highlightMultiChip("taskChips", "data-task", state.formTasks);
+    renderPhotoStrip();
   }
 
   function highlightChip(containerId, attr, value, isStatus) {
@@ -619,6 +775,16 @@
       } else {
         chip.classList.toggle("selected", match);
       }
+    });
+  }
+
+  function highlightMultiChip(containerId, attr, selectedArr) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var chips = container.querySelectorAll("[" + attr + "]");
+    chips.forEach(function (chip) {
+      var match = selectedArr.indexOf(chip.getAttribute(attr)) !== -1;
+      chip.classList.toggle("selected", match);
     });
   }
 
