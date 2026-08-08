@@ -594,9 +594,7 @@
     var html = "";
     html += '<div class="header">';
     html += '<div class="header-top" style="justify-content:space-between;"><div style="display:flex;align-items:center;gap:10px;"><div class="badge">B</div><div><div class="header-title">Best</div><div class="header-sub">Mercedes-Benz Service</div></div></div>' +
-      (typeof Notification !== "undefined"
-        ? '<button onclick="__app.requestNotify()" style="background:none;border:none;color:#8D9299;font-size:20px;cursor:pointer;padding:6px;" title="Включить уведомления">🔔</button>'
-        : '') + '</div>';
+      '<button onclick="__app.requestNotify()" style="background:none;border:none;color:#8D9299;font-size:20px;cursor:pointer;padding:6px;" title="Включить уведомления">🔔</button></div>';
     html += '<div class="tabs">';
     html += '<button class="tab-btn ' + (state.view === "calendar" ? "active" : "") + '" onclick="__app.setView(\'calendar\')">Календарь</button>';
     html += '<button class="tab-btn ' + (state.view === "clients" ? "active" : "") + '" onclick="__app.setView(\'clients\')">Клиенты</button>';
