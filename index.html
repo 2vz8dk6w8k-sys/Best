@@ -14,7 +14,7 @@
 
 <style>
   * { box-sizing: border-box; }
-  html, body { margin:0; padding:0; background:#EDEEF0; color:#17181B;
+  html, body { margin:0; padding:0; background:#EDEEF0; color:#17181B; overscroll-behavior:none;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; letter-spacing:-0.01em; }
   .mono { font-family: "SFMono-Regular", Menlo, Consolas, monospace; }
   .hidden { display:none !important; }
@@ -577,13 +577,17 @@
       document.body.style.top = "-" + (window.__scrollY || 0) + "px";
       document.body.style.left = "0";
       document.body.style.right = "0";
+      document.body.style.width = "100%";
       document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
     } else if (document.body.style.position === "fixed") {
       document.body.style.position = "";
       document.body.style.top = "";
       document.body.style.left = "";
       document.body.style.right = "";
+      document.body.style.width = "";
       document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
       window.scrollTo(0, window.__scrollY || 0);
     }
 
@@ -877,6 +881,14 @@
   }
 
   init();
+
+  document.addEventListener("touchmove", function (e) {
+    if (state.showForm) {
+      var insideScrollable = e.target.closest && e.target.closest(".modal-body");
+      if (!insideScrollable) e.preventDefault();
+    }
+  }, { passive: false });
+
 })();
 </script>
 </body>
