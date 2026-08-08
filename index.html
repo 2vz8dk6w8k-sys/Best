@@ -405,11 +405,13 @@
       deleteBookingFromFirestore(id);
     },
     openNewForm: function () {
+      window.__scrollY = window.scrollY;
       state.editBooking = null; state.showForm = true;
       state.formPhotos = []; state.formTasks = [];
       render();
     },
     openEditForm: function (id) {
+      window.__scrollY = window.scrollY;
       var b = state.data.bookings.filter(function (x) { return x.id === id; })[0] || null;
       state.editBooking = b;
       state.formPhotos = (b && b.photos) ? b.photos.slice() : [];
@@ -570,10 +572,27 @@
       return;
     }
 
+    if (state.showForm) {
+      document.body.style.position = "fixed";
+      document.body.style.top = "-" + (window.__scrollY || 0) + "px";
+      document.body.style.left = "0";
+      document.body.style.right = "0";
+      document.body.style.overflow = "hidden";
+    } else if (document.body.style.position === "fixed") {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.style.overflow = "";
+      window.scrollTo(0, window.__scrollY || 0);
+    }
+
     var html = "";
     html += '<div class="header">';
     html += '<div class="header-top" style="justify-content:space-between;"><div style="display:flex;align-items:center;gap:10px;"><div class="badge">B</div><div><div class="header-title">Best</div><div class="header-sub">Mercedes-Benz Service</div></div></div>' +
-      '<button onclick="__app.requestNotify()" style="background:none;border:none;color:#8D9299;font-size:20px;cursor:pointer;padding:6px;" title="Включить уведомления">🔔</button></div>';
+      (typeof Notification !== "undefined"
+        ? '<button onclick="__app.requestNotify()" style="background:none;border:none;color:#8D9299;font-size:20px;cursor:pointer;padding:6px;" title="Включить уведомления">🔔</button>'
+        : '') + '</div>';
     html += '<div class="tabs">';
     html += '<button class="tab-btn ' + (state.view === "calendar" ? "active" : "") + '" onclick="__app.setView(\'calendar\')">Календарь</button>';
     html += '<button class="tab-btn ' + (state.view === "clients" ? "active" : "") + '" onclick="__app.setView(\'clients\')">Клиенты</button>';
