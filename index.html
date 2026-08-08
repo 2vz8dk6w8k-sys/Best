@@ -712,7 +712,7 @@
 
     html += '<div class="field"><label>Фото</label>';
     html += '<div id="photoStrip" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>';
-    html += '<input type="file" id="f_photoInput" accept="image/*" multiple capture="environment" style="display:none;" onchange="__app.handlePhotoFiles(this)"/>';
+    html += '<input type="file" id="f_photoInput" accept="image/*" multiple style="display:none;" onchange="__app.handlePhotoFiles(this)"/>';
     html += '<button type="button" class="add-btn" style="width:100%;padding:9px;" onclick="document.getElementById(\'f_photoInput\').click()">📷 Добавить фото</button>';
     html += '<div id="photoNotice" style="font-size:11px;color:#9A9EA2;margin-top:4px;"></div>';
     html += '</div>';
