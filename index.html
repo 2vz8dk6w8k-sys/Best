@@ -43,7 +43,7 @@
 
   .err-banner { text-align:center; font-size:12px; padding:8px; background:#B4102E; color:#fff; }
 
-  .day-strip { display:flex; gap:8px; overflow-x:auto; padding:12px 16px; background:#fff; border-bottom:1px solid #DEE0E3; }
+  .day-strip { display:flex; gap:8px; overflow-x:auto; padding:12px 16px; background:#fff; border-bottom:1px solid #DEE0E3; position:relative; }
   .day-btn { flex-shrink:0; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:600;
     text-align:center; min-width:62px; background:#F2F3F4; color:#54585D; border:1.5px solid transparent; }
   .day-btn.selected { background:#1B1C1F; color:#fff; }
@@ -341,7 +341,7 @@
   function dayStrip() {
     var out = [];
     var base = new Date();
-    for (var i = -1; i < 9; i++) {
+    for (var i = -3; i < 35; i++) {
       var d = new Date(base);
       d.setDate(base.getDate() + i);
       out.push(d.toISOString().slice(0, 10));
@@ -482,18 +482,79 @@
       renderPhotoStrip();
     },
     openPhoto: function (idx) {
-      var w = window.open();
-      if (w) w.document.write('<img src="' + state.formPhotos[idx] + '" style="max-width:100%;">');
+      openGallery(state.formPhotos, idx);
     },
     openTicketPhoto: function (bookingId, idx) {
       var b = state.data.bookings.filter(function (x) { return x.id === bookingId; })[0];
       if (!b || !b.photos || !b.photos[idx]) return;
-      var w = window.open();
-      if (w) w.document.write('<img src="' + b.photos[idx] + '" style="max-width:100%;">');
+      openGallery(b.photos, idx);
     },
+    closeGallery: function () { closeGallery(); },
+    galleryNext: function () { moveGallery(1); },
+    galleryPrev: function () { moveGallery(-1); },
     onFormFieldChange: function () { /* no-op, values read on save */ },
-    requestNotify: function () { requestNotifyPermission(); }
+    requestNotify: function () { requestNotifyPermission(); },
+    deleteFromForm: function (id) {
+      var ok = window.confirm("Удалить эту запись? Это действие нельзя отменить.");
+      if (!ok) return;
+      state.data.bookings = state.data.bookings.filter(function (b) { return b.id !== id; });
+      state.showForm = false; state.editBooking = null;
+      render();
+      deleteBookingFromFirestore(id);
+    },
+    cleanupOld: function () {
+      var input = window.prompt("Удалить все записи ДО какой даты? Формат: ГГГГ-ММ-ДД", todayStr());
+      if (!input) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input)) { showToast("Неверный формат даты"); return; }
+      var toDelete = state.data.bookings.filter(function (b) { return b.date < input; });
+      if (toDelete.length === 0) { showToast("Нет записей до этой даты"); return; }
+      var ok = window.confirm("Удалить " + toDelete.length + " " + (toDelete.length === 1 ? "запись" : "записей") + " до " + input + "? Это действие нельзя отменить.");
+      if (!ok) return;
+      toDelete.forEach(function (b) { deleteBookingFromFirestore(b.id); });
+      state.data.bookings = state.data.bookings.filter(function (b) { return b.date >= input; });
+      render();
+      showToast("Удалено записей: " + toDelete.length);
+    }
   };
+
+  var galleryEl = null;
+  var galleryPhotos = [];
+  var galleryIndex = 0;
+  var galleryTouchStartX = null;
+
+  function openGallery(photos, idx) {
+    galleryPhotos = photos;
+    galleryIndex = idx;
+    renderGallery();
+  }
+  function closeGallery() {
+    if (galleryEl) { galleryEl.remove(); galleryEl = null; }
+  }
+  function moveGallery(dir) {
+    galleryIndex = (galleryIndex + dir + galleryPhotos.length) % galleryPhotos.length;
+    renderGallery();
+  }
+  function renderGallery() {
+    if (galleryEl) galleryEl.remove();
+    galleryEl = document.createElement("div");
+    galleryEl.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:60;display:flex;align-items:center;justify-content:center;";
+    var showNav = galleryPhotos.length > 1;
+    galleryEl.innerHTML =
+      '<button onclick="__app.closeGallery()" style="position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:999px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:20px;cursor:pointer;z-index:2;">✕</button>' +
+      (showNav ? '<button onclick="__app.galleryPrev()" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:999px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:22px;cursor:pointer;z-index:2;">‹</button>' : '') +
+      (showNav ? '<button onclick="__app.galleryNext()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:999px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:22px;cursor:pointer;z-index:2;">›</button>' : '') +
+      '<img src="' + galleryPhotos[galleryIndex] + '" style="max-width:92vw;max-height:82vh;object-fit:contain;border-radius:4px;"/>' +
+      (showNav ? '<div style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#fff;font-size:13px;opacity:0.8;">' + (galleryIndex + 1) + ' / ' + galleryPhotos.length + '</div>' : '');
+    galleryEl.addEventListener("touchstart", function (e) { galleryTouchStartX = e.touches[0].clientX; });
+    galleryEl.addEventListener("touchend", function (e) {
+      if (galleryTouchStartX === null) return;
+      var diff = e.changedTouches[0].clientX - galleryTouchStartX;
+      if (Math.abs(diff) > 40 && showNav) moveGallery(diff < 0 ? 1 : -1);
+      galleryTouchStartX = null;
+    });
+    galleryEl.addEventListener("click", function (e) { if (e.target === galleryEl) closeGallery(); });
+    document.body.appendChild(galleryEl);
+  }
 
   function compressImage(file, cb) {
     var reader = new FileReader();
@@ -640,12 +701,17 @@
       var cls = "day-btn" + (d === state.selectedDate ? " selected" : "") + (d === today ? " today" : "");
       html += '<button class="' + cls + '" onclick="__app.selectDate(\'' + d + '\')">' + esc(fmtDateLabel(d)) + '</button>';
     });
+    html += '<button class="day-btn" style="min-width:44px;" onclick="document.getElementById(\'dateJump\').showPicker ? document.getElementById(\'dateJump\').showPicker() : document.getElementById(\'dateJump\').click()">📅</button>';
+    html += '<input type="date" id="dateJump" value="' + esc(state.selectedDate) + '" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" onchange="__app.selectDate(this.value)"/>';
     html += '</div>';
 
     html += '<div class="content">';
     var list = bookingsForDay();
     var wordForms = list.length === 1 ? "запись" : "записей";
-    html += '<div class="day-summary">' + list.length + ' ' + wordForms + ' на ' + esc(fmtDateLabel(state.selectedDate)) + '</div>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">';
+    html += '<div class="day-summary" style="margin-bottom:0;">' + list.length + ' ' + wordForms + ' на ' + esc(fmtDateLabel(state.selectedDate)) + '</div>';
+    html += '<button onclick="__app.cleanupOld()" style="border:none;background:none;color:#9DA3A8;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;">🗑 Старые записи</button>';
+    html += '</div>';
 
     if (list.length === 0) {
       html += '<div class="empty-state">🔧<br/>На этот день пока нет записей</div>';
@@ -755,7 +821,7 @@
     html += '</div>';
     html += '<div class="field"><label>VIN</label><input id="f_vin" class="input" placeholder="WDD..." style="text-transform:uppercase;"/></div>';
 
-    html += '<div class="field"><label>Услуга / работа</label><textarea id="f_service" class="input" rows="2" placeholder="Замена масла, диагностика подвески…"></textarea></div>';
+    html += '<div class="field"><label>Услуга / работа</label><textarea id="f_service" class="input" rows="4" style="resize:vertical;min-height:90px;" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\';" placeholder="Замена масла, диагностика подвески…"></textarea></div>';
 
     html += '<div class="field"><label>Работы (можно несколько)</label><div class="chip-row" id="taskChips">';
     TASK_LIST.forEach(function (t) {
@@ -787,6 +853,9 @@
     html += '</div><input type="hidden" id="f_status" value=""/></div>';
 
     html += '<button class="save-btn" onclick="__app.saveForm()">✓ Сохранить запись</button>';
+    if (f) {
+      html += '<button onclick="__app.deleteFromForm(\'' + f.id + '\')" style="width:100%;margin-top:10px;padding:12px;border-radius:11px;font-weight:700;border:1px solid #E4A0AA;color:#B4102E;background:none;cursor:pointer;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;">Удалить запись</button>';
+    }
     html += '</div></div></div>';
     return html;
   }
@@ -804,6 +873,8 @@
     g("f_brand").value = brand;
     highlightChip("brandChips", "data-brand", brand);
     g("f_service").value = f ? f.service : "";
+    g("f_service").style.height = "auto";
+    g("f_service").style.height = g("f_service").scrollHeight + "px";
     var master = f ? f.master : (state.data.masters[0] || "");
     var status = f ? f.status : "planned";
     g("f_master").value = master;
