@@ -494,6 +494,20 @@
     galleryNext: function () { moveGallery(1); },
     galleryPrev: function () { moveGallery(-1); },
     onFormFieldChange: function () { /* no-op, values read on save */ },
+    onClientNameInput: function (val) { renderClientSuggestions(val); },
+    pickClientSuggestion: function (i) {
+      var b = window.__clientSuggestMatches && window.__clientSuggestMatches[i];
+      if (!b) return;
+      var g = function (id) { return document.getElementById(id); };
+      g("f_clientName").value = b.clientName || "";
+      g("f_phone").value = b.phone || "";
+      g("f_car").value = b.car || "";
+      g("f_plate").value = b.plate || "";
+      g("f_vin").value = b.vin || "";
+      g("f_brand").value = b.brand || "";
+      highlightChip("brandChips", "data-brand", b.brand || "");
+      g("clientSuggest").innerHTML = "";
+    },
     requestNotify: function () { requestNotifyPermission(); },
     deleteFromForm: function (id) {
       var ok = window.confirm("Удалить эту запись? Это действие нельзя отменить.");
@@ -811,7 +825,7 @@
     html += '<div class="field"><label>Время</label><input id="f_time" type="time" class="input"/></div>';
     html += '</div>';
 
-    html += '<div class="field"><label>Имя клиента *</label><input id="f_clientName" class="input" placeholder="Например, Дмитрий"/></div>';
+    html += '<div class="field" style="position:relative;"><label>Имя клиента *</label><input id="f_clientName" class="input" placeholder="Например, Дмитрий" autocomplete="off" oninput="__app.onClientNameInput(this.value)" onfocus="__app.onClientNameInput(this.value)" onblur="setTimeout(function(){var e=document.getElementById(\'clientSuggest\'); if(e) e.innerHTML=\'\';},200)"/><div id="clientSuggest" style="position:absolute;top:100%;left:0;right:0;z-index:10;background:#fff;border:1px solid #DEE0E3;border-radius:9px;margin-top:4px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div></div>';
     html += '<div class="field"><label>Телефон</label><input id="f_phone" class="input" placeholder="+7 900 000-00-00"/></div>';
 
     html += '<div class="field"><label>Марка</label><div class="chip-row" id="brandChips">';
@@ -947,6 +961,35 @@
     Notification.requestPermission().then(function (perm) {
       showToast(perm === "granted" ? "Уведомления включены" : "Уведомления не разрешены");
     });
+  }
+
+  function renderClientSuggestions(query) {
+    var el = document.getElementById("clientSuggest");
+    if (!el) return;
+    query = (query || "").trim().toLowerCase();
+    if (!query) { el.innerHTML = ""; return; }
+    var sorted = state.data.bookings.slice().sort(function (a, b) {
+      return (b.date + b.time).localeCompare(a.date + a.time);
+    });
+    var seen = {};
+    var matches = [];
+    sorted.forEach(function (b) {
+      if (!b.clientName) return;
+      var key = b.clientName.toLowerCase();
+      if (key.indexOf(query) === -1 || seen[key]) return;
+      seen[key] = true;
+      matches.push(b);
+    });
+    matches = matches.slice(0, 5);
+    window.__clientSuggestMatches = matches;
+    if (!matches.length) { el.innerHTML = ""; return; }
+    el.innerHTML = matches.map(function (b, i) {
+      var sub = [b.phone, b.car].filter(Boolean).join(" · ");
+      return '<button type="button" onmousedown="__app.pickClientSuggestion(' + i + ')" style="display:block;width:100%;text-align:left;padding:10px 12px;border:none;background:#fff;border-bottom:1px solid #EEF1ED;font-size:14px;cursor:pointer;">' +
+        '<div style="font-weight:600;">' + esc(b.clientName) + '</div>' +
+        (sub ? '<div style="font-size:12px;color:#8D9299;margin-top:1px;">' + esc(sub) + '</div>' : '') +
+        '</button>';
+    }).join("");
   }
 
   function highlightMultiChip(containerId, attr, selectedArr) {
