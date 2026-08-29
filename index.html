@@ -232,7 +232,7 @@
     formTasks: []
   };
 
-  var db = null, bookingsRef = null, metaRef = null, loadTimeout = null;
+  var db = null, bookingsRef = null, metaRef = null, loadTimeout = null, slowTimeoutRef = null;
   var metaLoaded = false, bookingsLoaded = false;
   var firstBookingsSnapshot = true;
   var ownRecentIds = {}; // id -> timestamp, to avoid self-notifying right after saving
@@ -257,7 +257,9 @@
   function checkReady() {
     if (metaLoaded && bookingsLoaded) {
       clearTimeout(loadTimeout);
+      clearTimeout(slowTimeoutRef);
       state.phase = "ready";
+      state.slowLoading = false;
       render();
     }
   }
@@ -277,11 +279,20 @@
 
     state.data = defaultData();
 
+    var slowTimeout = setTimeout(function () {
+      if (state.phase === "loading") {
+        state.slowLoading = true;
+        render();
+      }
+    }, 7000);
+    slowTimeoutRef = slowTimeout;
+
     loadTimeout = setTimeout(function () {
+      clearTimeout(slowTimeoutRef);
       state.phase = "error";
-      state.errorMsg = "Нет ответа от базы данных дольше 10 секунд. Возможно: 1) не создана Firestore Database в консоли Firebase, 2) сеть блокирует доступ к серверам Google (попробуй другой Wi-Fi/интернет), 3) в правилах Firestore не нажали Publish.";
+      state.errorMsg = "Нет ответа от базы данных дольше 30 секунд. Возможно: 1) не создана Firestore Database в консоли Firebase, 2) сеть блокирует доступ к серверам Google (попробуй другой Wi-Fi/интернет), 3) в правилах Firestore не нажали Publish.";
       render();
-    }, 10000);
+    }, 30000);
 
     metaRef.onSnapshot(function (snap) {
       if (snap.exists && snap.data().masters) {
@@ -645,6 +656,9 @@
       root.innerHTML =
         '<div class="center-screen">' +
           '<div class="mono" style="color:#14555A;font-size:14px;">загрузка…</div>' +
+          (state.phase === "loading" && state.slowLoading
+            ? '<div style="margin-top:12px;font-size:13px;color:#8D9299;max-width:300px;">Соединение медленное — продолжаем ждать ответ от базы…</div>'
+            : '') +
           (state.phase === "error"
             ? '<div style="margin-top:16px;font-size:14px;color:#B8452F;max-width:340px;">' + esc(state.errorMsg) + '</div>'
             : '') +
