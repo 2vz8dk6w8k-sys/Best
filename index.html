@@ -120,8 +120,6 @@
   .chip { padding:6px 12px; border-radius:999px; font-size:13px; border:1px solid #DEE0E3; background:#fff; color:#17181B; cursor:pointer; }
   .chip.selected { background:#1B1C1F; color:#fff; border-color:#1B1C1F; }
   .status-chip { padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700; border:none; cursor:pointer; text-transform:uppercase; letter-spacing:0.03em; }
-  .add-master-row { display:flex; gap:8px; margin-top:8px; }
-  .add-master-row .input { flex:1; }
   .add-btn { padding:0 12px; border-radius:9px; font-weight:700; background:#fff; border:1px solid #DEE0E3; cursor:pointer; }
   .save-btn { width:100%; margin-top:16px; padding:13px; border-radius:11px; font-weight:700; border:none;
     color:#fff; background:linear-gradient(150deg, #26282C, #101113); cursor:pointer; font-size:14px;
@@ -457,20 +455,6 @@
       document.getElementById("f_master").value = m;
       highlightChip("masterChips", "data-master", m);
     },
-    addMaster: function () {
-      var input = document.getElementById("f_newMaster");
-      var name = input.value.trim();
-      if (!name) return;
-      var masters = state.data.masters.concat([name]);
-      state.data.masters = masters;
-      saveMasters(masters);
-      var chipsHtml = document.getElementById("masterChips").innerHTML;
-      chipsHtml += '<button type="button" class="chip selected" data-master="' + esc(name) + '" onclick="__app.pickMaster(\'' + name.replace(/'/g, "\\'") + '\')">' + esc(name) + '</button>';
-      document.getElementById("masterChips").innerHTML = chipsHtml;
-      document.getElementById("f_master").value = name;
-      highlightChip("masterChips", "data-master", name);
-      input.value = "";
-    },
     pickStatus: function (k) {
       document.getElementById("f_status").value = k;
       highlightChip("statusChips", "data-status", k, true);
@@ -645,6 +629,7 @@
       plate: g("f_plate").value,
       brand: g("f_brand").value,
       vin: g("f_vin").value.toUpperCase(),
+      mileage: g("f_mileage").value,
       service: g("f_service").value,
       notes: g("f_notes").value,
       master: g("f_master").value,
@@ -768,6 +753,7 @@
         html += '<span>🚗 ' + esc(carLabel.trim()) + (b.plate ? ' · ' + esc(b.plate) : '') + '</span>';
       }
       if (b.vin) html += '<span class="mono">VIN ' + esc(b.vin) + '</span>';
+      if (b.mileage) html += '<span>🛣️ ' + esc(b.mileage) + ' км</span>';
       if (b.master) html += '<span>👤 ' + esc(b.master) + '</span>';
       html += '</div>';
       if (b.service) html += '<div class="ticket-service">' + esc(b.service) + '</div>';
@@ -860,6 +846,7 @@
     html += '<div class="field"><label>Гос. номер</label><input id="f_plate" class="input" placeholder="А123ВС"/></div>';
     html += '</div>';
     html += '<div class="field"><label>VIN</label><input id="f_vin" class="input" placeholder="WDD..." style="text-transform:uppercase;"/></div>';
+    html += '<div class="field"><label>Пробег (км)</label><input id="f_mileage" class="input" type="text" inputmode="numeric" placeholder="Например, 145000"/></div>';
 
     html += '<div class="field"><label>Услуга / работа</label><textarea id="f_service" class="input" rows="4" style="resize:vertical;min-height:90px;" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\';" placeholder="Замена масла, диагностика подвески…"></textarea></div>';
 
@@ -884,7 +871,6 @@
     });
     html += '</div>';
     html += '<input type="hidden" id="f_master" value=""/>';
-    html += '<div class="add-master-row"><input id="f_newMaster" class="input" placeholder="Добавить мастера"/><button type="button" class="add-btn" onclick="__app.addMaster()">+</button></div>';
     html += '</div>';
 
     html += '<div class="field"><label>Статус</label><div class="chip-row" id="statusChips">';
@@ -911,6 +897,7 @@
     g("f_car").value = f ? f.car : "";
     g("f_plate").value = f ? f.plate : "";
     g("f_vin").value = f ? (f.vin || "") : "";
+    g("f_mileage").value = f ? (f.mileage || "") : "";
     var brand = f ? (f.brand || "") : "";
     g("f_brand").value = brand;
     highlightChip("brandChips", "data-brand", brand);
