@@ -428,9 +428,31 @@
       saveBookingToFirestore(updated);
     },
     deleteBooking: function (id) {
+      var ok = window.confirm("Удалить эту запись? Это действие нельзя отменить.");
+      if (!ok) return;
       state.data.bookings = state.data.bookings.filter(function (b) { return b.id !== id; });
       render();
       deleteBookingFromFirestore(id);
+    },
+    newBookingForClient: function (key) {
+      var list = window.__clientListForNewBooking || [];
+      var c = list.filter(function (x) { return x.key === key; })[0];
+      if (!c) return;
+      var latest = c.bookings[0] || {};
+      window.__scrollY = window.scrollY;
+      state.editBooking = null;
+      state.formPhotos = [];
+      state.formTasks = [];
+      state.prefillClient = {
+        clientName: c.name || "",
+        phone: c.phone || "",
+        brand: latest.brand || "",
+        car: latest.car || "",
+        plate: latest.plate || "",
+        vin: latest.vin || ""
+      };
+      state.showForm = true;
+      render();
     },
     openNewForm: function () {
       window.__scrollY = window.scrollY;
@@ -804,6 +826,8 @@
       html += '<div class="empty-state">👤<br/>Клиенты появятся здесь после первой записи</div>';
     }
 
+    window.__clientListForNewBooking = list;
+
     list.forEach(function (c) {
       var open = state.openClientKey === c.key;
       var initial = (c.name || "?").trim().charAt(0).toUpperCase();
@@ -817,6 +841,7 @@
       html += '</div></div><div>📜</div></button>';
       if (open) {
         html += '<div class="client-history">';
+        html += '<button onclick="__app.newBookingForClient(\'' + c.key.replace(/'/g, "\\'") + '\')" style="width:100%;margin:10px 0 4px;padding:9px;border-radius:9px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;border:1px solid #1B1C1F;background:#1B1C1F;color:#fff;cursor:pointer;">+ Новая запись для этого клиента</button>';
         c.bookings.forEach(function (b) {
           var s = STATUS[b.status] || STATUS.planned;
           var taskLabel = (b.tasks && b.tasks.length) ? b.tasks.join(", ") : (b.service || "—");
@@ -904,15 +929,16 @@
 
   function setFormValues(f) {
     var g = function (id) { return document.getElementById(id); };
+    var pre = (!f && state.prefillClient) ? state.prefillClient : null;
     g("f_date").value = f ? f.date : state.selectedDate;
     g("f_time").value = f ? f.time : "10:00";
-    g("f_clientName").value = f ? f.clientName : "";
-    g("f_phone").value = f ? f.phone : "";
-    g("f_car").value = f ? f.car : "";
-    g("f_plate").value = f ? f.plate : "";
-    g("f_vin").value = f ? (f.vin || "") : "";
+    g("f_clientName").value = f ? f.clientName : (pre ? pre.clientName : "");
+    g("f_phone").value = f ? f.phone : (pre ? pre.phone : "");
+    g("f_car").value = f ? f.car : (pre ? pre.car : "");
+    g("f_plate").value = f ? f.plate : (pre ? pre.plate : "");
+    g("f_vin").value = f ? (f.vin || "") : (pre ? pre.vin : "");
     g("f_mileage").value = f ? (f.mileage || "") : "";
-    var brand = f ? (f.brand || "") : "";
+    var brand = f ? (f.brand || "") : (pre ? pre.brand : "");
     g("f_brand").value = brand;
     highlightChip("brandChips", "data-brand", brand);
     g("f_service").value = f ? f.service : "";
@@ -929,6 +955,7 @@
     highlightChip("statusChips", "data-status", status, true);
     highlightMultiChip("taskChips", "data-task", state.formTasks);
     renderPhotoStrip();
+    state.prefillClient = null;
   }
 
   function highlightChip(containerId, attr, value, isStatus) {
