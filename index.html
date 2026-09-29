@@ -751,13 +751,16 @@
 
   function renderCalendar() {
     var html = '<div class="day-strip">';
+    html += '<div style="position:sticky;left:0;z-index:3;background:#fff;flex-shrink:0;">' +
+      '<button class="day-btn" style="min-width:44px;position:relative;">📅</button>' +
+      '<input type="date" id="dateJump" value="' + esc(state.selectedDate) + '" onchange="__app.selectDate(this.value)" ' +
+      'style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;padding:0;margin:0;font-size:16px;"/>' +
+      '</div>';
     var today = todayStr();
     dayStrip().forEach(function (d) {
       var cls = "day-btn" + (d === state.selectedDate ? " selected" : "") + (d === today ? " today" : "");
       html += '<button class="' + cls + '" onclick="__app.selectDate(\'' + d + '\')">' + esc(fmtDateLabel(d)) + '</button>';
     });
-    html += '<button class="day-btn" style="min-width:44px;" onclick="document.getElementById(\'dateJump\').showPicker ? document.getElementById(\'dateJump\').showPicker() : document.getElementById(\'dateJump\').click()">📅</button>';
-    html += '<input type="date" id="dateJump" value="' + esc(state.selectedDate) + '" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" onchange="__app.selectDate(this.value)"/>';
     html += '</div>';
 
     html += '<div class="content">';
