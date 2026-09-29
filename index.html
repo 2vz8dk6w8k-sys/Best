@@ -754,7 +754,8 @@
     html += '<div style="position:sticky;left:0;z-index:3;background:#fff;flex-shrink:0;">' +
       '<button class="day-btn" style="min-width:44px;position:relative;">📅</button>' +
       '<input type="date" id="dateJump" value="' + esc(state.selectedDate) + '" onchange="__app.selectDate(this.value)" ' +
-      'style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;padding:0;margin:0;font-size:16px;"/>' +
+      'onclick="try{this.showPicker && this.showPicker();}catch(e){}" onfocus="try{this.showPicker && this.showPicker();}catch(e){}" ' +
+      'style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;padding:0;margin:0;font-size:16px;cursor:pointer;"/>' +
       '</div>';
     var today = todayStr();
     dayStrip().forEach(function (d) {
