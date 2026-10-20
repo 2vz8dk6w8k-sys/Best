@@ -229,6 +229,7 @@
     showForm: false,
     editBooking: null,
     formPhotos: [],
+    formCarOptions: [],
     formTasks: []
   };
 
@@ -380,6 +381,28 @@
       .sort(function (a, b) { return a.time.localeCompare(b.time); });
   }
 
+  function getClientCarRecords(name, phone) {
+    var nameLc = (name || "").toLowerCase();
+    var matches = state.data.bookings
+      .filter(function (b) {
+        if (phone && b.phone && b.phone === phone) return true;
+        return (b.clientName || "").toLowerCase() === nameLc;
+      })
+      .sort(function (a, b) { return (b.date + b.time).localeCompare(a.date + a.time); });
+    var seen = {};
+    var records = [];
+    matches.forEach(function (b) {
+      if (!b.car && !b.brand && !b.plate && !b.vin) return;
+      var dedupeKey = [(b.brand||""), (b.car||""), (b.plate||""), (b.vin||"")].join("|").toLowerCase();
+      if (seen[dedupeKey]) return;
+      seen[dedupeKey] = true;
+      var label = ((b.brand ? b.brand + " " : "") + (b.car || "")).trim() || "Без марки";
+      if (b.plate) label += " · " + b.plate;
+      records.push({ brand: b.brand || "", car: b.car || "", plate: b.plate || "", vin: b.vin || "", label: label });
+    });
+    return records;
+  }
+
   function clientList() {
     var map = {};
     state.data.bookings.forEach(function (b) {
@@ -438,18 +461,20 @@
       var list = window.__clientListForNewBooking || [];
       var c = list.filter(function (x) { return x.key === key; })[0];
       if (!c) return;
-      var latest = c.bookings[0] || {};
+      var cars = getClientCarRecords(c.name, c.phone);
+      var first = cars[0] || {};
       window.__scrollY = window.scrollY;
       state.editBooking = null;
       state.formPhotos = [];
       state.formTasks = [];
+      state.formCarOptions = cars;
       state.prefillClient = {
         clientName: c.name || "",
         phone: c.phone || "",
-        brand: latest.brand || "",
-        car: latest.car || "",
-        plate: latest.plate || "",
-        vin: latest.vin || ""
+        brand: first.brand || "",
+        car: first.car || "",
+        plate: first.plate || "",
+        vin: first.vin || ""
       };
       state.showForm = true;
       render();
@@ -457,7 +482,7 @@
     openNewForm: function () {
       window.__scrollY = window.scrollY;
       state.editBooking = null; state.showForm = true;
-      state.formPhotos = []; state.formTasks = [];
+      state.formPhotos = []; state.formTasks = []; state.formCarOptions = [];
       render();
     },
     openEditForm: function (id) {
@@ -466,6 +491,7 @@
       state.editBooking = b;
       state.formPhotos = (b && b.photos) ? b.photos.slice() : [];
       state.formTasks = (b && b.tasks) ? b.tasks.slice() : [];
+      state.formCarOptions = [];
       state.showForm = true; render();
     },
     closeForm: function () { state.showForm = false; state.editBooking = null; render(); },
@@ -534,14 +560,30 @@
       var b = window.__clientSuggestMatches && window.__clientSuggestMatches[i];
       if (!b) return;
       var g = function (id) { return document.getElementById(id); };
+      var cars = getClientCarRecords(b.clientName, b.phone);
+      var first = cars[0] || {};
       g("f_clientName").value = b.clientName || "";
       g("f_phone").value = b.phone || "";
-      g("f_car").value = b.car || "";
-      g("f_plate").value = b.plate || "";
-      g("f_vin").value = b.vin || "";
-      g("f_brand").value = b.brand || "";
-      highlightChip("brandChips", "data-brand", b.brand || "");
+      g("f_car").value = first.car || "";
+      g("f_plate").value = first.plate || "";
+      g("f_vin").value = first.vin || "";
+      g("f_brand").value = first.brand || "";
+      highlightChip("brandChips", "data-brand", first.brand || "");
       g("clientSuggest").innerHTML = "";
+      state.formCarOptions = cars;
+      renderCarOptionRow();
+    },
+    pickCarOption: function (idx) {
+      var cars = state.formCarOptions || [];
+      var rec = cars[idx];
+      if (!rec) return;
+      var g = function (id) { return document.getElementById(id); };
+      g("f_car").value = rec.car || "";
+      g("f_plate").value = rec.plate || "";
+      g("f_vin").value = rec.vin || "";
+      g("f_brand").value = rec.brand || "";
+      highlightChip("brandChips", "data-brand", rec.brand || "");
+      highlightMultiChip("carOptionChips", "data-car-idx", [String(idx)]);
     },
     requestNotify: function () { requestNotifyPermission(); },
     deleteFromForm: function (id) {
@@ -633,6 +675,22 @@
   function renderPhotoNotice(msg) {
     var el = document.getElementById("photoNotice");
     if (el) el.textContent = msg;
+  }
+
+  function carOptionsHtml() {
+    var cars = state.formCarOptions || [];
+    if (cars.length <= 1) return "";
+    var html = '<div class="field"><label>Машина клиента (на учёте ' + cars.length + ')</label><div class="chip-row" id="carOptionChips">';
+    cars.forEach(function (rec, i) {
+      html += '<button type="button" class="chip' + (i === 0 ? ' selected' : '') + '" data-car-idx="' + i + '" onclick="__app.pickCarOption(' + i + ')">' + esc(rec.label) + '</button>';
+    });
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderCarOptionRow() {
+    var el = document.getElementById("carOptionWrap");
+    if (el) el.innerHTML = carOptionsHtml();
   }
 
   function renderPhotoStrip() {
@@ -877,6 +935,8 @@
 
     html += '<div class="field" style="position:relative;"><label>Имя клиента *</label><input id="f_clientName" class="input" placeholder="Например, Дмитрий" autocomplete="off" oninput="__app.onClientNameInput(this.value)" onfocus="__app.onClientNameInput(this.value)" onblur="setTimeout(function(){var e=document.getElementById(\'clientSuggest\'); if(e) e.innerHTML=\'\';},200)"/><div id="clientSuggest" style="position:absolute;top:100%;left:0;right:0;z-index:10;background:#fff;border:1px solid #DEE0E3;border-radius:9px;margin-top:4px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div></div>';
     html += '<div class="field"><label>Телефон</label><input id="f_phone" class="input" placeholder="+7 900 000-00-00"/></div>';
+
+    html += '<div id="carOptionWrap">' + carOptionsHtml() + '</div>';
 
     html += '<div class="field"><label>Марка</label><div class="chip-row" id="brandChips">';
     ["Mercedes", "Toyota", "BMW", "Другое"].forEach(function (br) {
