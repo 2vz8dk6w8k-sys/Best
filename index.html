@@ -126,6 +126,25 @@
     text-transform:uppercase; letter-spacing:0.05em; }
   .save-btn:disabled { background:#C9CCCF; }
 
+  .period-row { display:flex; gap:6px; margin-bottom:14px; overflow-x:auto; }
+  .period-btn { flex-shrink:0; padding:8px 14px; border-radius:999px; border:1px solid #DEE0E3; background:#fff; color:#54585D; font-size:13px; font-weight:600; cursor:pointer; }
+  .period-btn.active { background:#1B1C1F; color:#fff; border-color:#1B1C1F; }
+  .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .stat-card { background:#fff; border:1px solid #E4E5E7; border-radius:14px; padding:14px; }
+  .stat-num { font-size:28px; font-weight:800; line-height:1.1; color:#17181B; }
+  .stat-label { margin-top:4px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#8D9299; }
+  .stat-section { background:#fff; border:1px solid #E4E5E7; border-radius:14px; padding:16px; margin-bottom:14px; }
+  .stat-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#63676C; margin-bottom:12px; }
+  .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:13px; }
+  .bar-label { width:42%; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bar-track { flex:1; height:10px; background:#EDEEF0; border-radius:999px; overflow:hidden; }
+  .bar-fill { height:100%; background:#1B1C1F; border-radius:999px; }
+  .bar-val { width:44px; text-align:right; flex-shrink:0; font-weight:700; }
+  .chart { display:flex; align-items:flex-end; gap:3px; height:90px; }
+  .chart-col { flex:1; min-width:3px; background:#1B1C1F; border-radius:3px 3px 0 0; }
+  .chart-axis { display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:#8D9299; }
+  .split-bar { display:flex; height:14px; border-radius:999px; overflow:hidden; margin:6px 0 10px; background:#EDEEF0; }
+  .stat-empty { color:#9A9EA2; font-size:13px; }
   .center-screen { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 24px; text-align:center; }
 
   .toast-wrap { position:fixed; top:10px; left:0; right:0; z-index:50; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; }
@@ -230,10 +249,12 @@
     editBooking: null,
     formPhotos: [],
     formCarOptions: [],
+    statsPeriod: "month",
     formTasks: []
   };
 
-  var db = null, bookingsRef = null, metaRef = null, loadTimeout = null, slowTimeoutRef = null;
+  var db = null, bookingsRef = null, metaRef = null, loadTimeout = null, slowTimeoutRef = null, photosRef = null;
+  var photoCache = {}, migrating = {}, migrationRunning = false;
   var metaLoaded = false, bookingsLoaded = false;
   var firstBookingsSnapshot = true;
   var ownRecentIds = {}; // id -> timestamp, to avoid self-notifying right after saving
@@ -270,6 +291,7 @@
       firebase.initializeApp(firebaseConfig);
       db = firebase.firestore();
       bookingsRef = db.collection("garage-bookings");
+      photosRef = db.collection("garage-photos");
       metaRef = db.collection("garage-meta").doc("info");
     } catch (e) {
       state.phase = "error";
@@ -332,6 +354,7 @@
       firstBookingsSnapshot = false;
 
       if (state.phase === "ready") render(); else checkReady();
+      migrateLegacyPhotos();
     }, function (err) {
       clearTimeout(loadTimeout);
       state.phase = "error";
@@ -342,23 +365,117 @@
     render();
   }
 
-  function saveBookingToFirestore(booking) {
+  function newPhotoId() {
+    return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+  function bookingPhotoItems(b) {
+    if (b.photoIds && b.photoIds.length) {
+      return b.photoIds.map(function (id, i) {
+        return { id: id, thumb: (b.thumbs && b.thumbs[i]) || "", full: photoCache[id] || null };
+      });
+    }
+    if (b.photos && b.photos.length) {
+      return b.photos.map(function (src) { return { id: null, thumb: src, full: src, legacy: true }; });
+    }
+    return [];
+  }
+  function bookingPhotoCount(b) {
+    return (b.photoIds && b.photoIds.length) || (b.photos && b.photos.length) || 0;
+  }
+  function fetchPhoto(id, cb) {
+    if (photoCache[id]) { cb(photoCache[id]); return; }
+    photosRef.doc(id).get().then(function (snap) {
+      var full = snap.exists ? snap.data().full : null;
+      if (full) photoCache[id] = full;
+      cb(full || null);
+    }).catch(function () { cb(null); });
+  }
+  function dbError(msg) {
+    state.phase = "error";
+    state.errorMsg = msg;
+    render();
+  }
+  function updateBookingFields(id, fields) {
+    ownRecentIds[id] = Date.now();
+    bookingsRef.doc(id).update(fields).catch(function () {
+      dbError("Не удалось сохранить изменение — проверь соединение.");
+    });
+  }
+  function saveBookingWithPhotos(booking, newItems, removedIds) {
     var id = booking.id;
     ownRecentIds[id] = Date.now();
     var payload = Object.assign({}, booking);
     delete payload.id;
-    bookingsRef.doc(id).set(payload).catch(function () {
-      state.phase = "error";
-      state.errorMsg = "Не удалось сохранить запись — проверь соединение. Возможно, фото слишком большие (уменьши количество).";
-      render();
+    delete payload.photos;
+    var batch = db.batch();
+    newItems.forEach(function (it) {
+      batch.set(photosRef.doc(it.id), { full: it.full, bookingId: id, createdAt: Date.now() });
+    });
+    removedIds.forEach(function (pid) { batch.delete(photosRef.doc(pid)); });
+    batch.set(bookingsRef.doc(id), payload);
+    batch.commit().catch(function () {
+      dbError("Не удалось сохранить запись — проверь соединение и попробуй ещё раз.");
     });
   }
-  function deleteBookingFromFirestore(id) {
-    bookingsRef.doc(id).delete().catch(function () {
-      state.phase = "error";
-      state.errorMsg = "Не удалось удалить запись — проверь соединение.";
-      render();
+  function deleteBookingWithPhotos(b) {
+    var batch = db.batch();
+    (b.photoIds || []).forEach(function (pid) { batch.delete(photosRef.doc(pid)); });
+    batch.delete(bookingsRef.doc(b.id));
+    batch.commit().catch(function () {
+      dbError("Не удалось удалить запись — проверь соединение.");
     });
+  }
+  function ensureThumbs(items, done) {
+    var pending = items.filter(function (it) { return it.needThumb; });
+    if (!pending.length) { done(); return; }
+    var left = pending.length;
+    pending.forEach(function (it) {
+      makeThumbFromDataUrl(it.full, function (t) {
+        it.thumb = t || it.full;
+        it.needThumb = false;
+        left--;
+        if (left === 0) done();
+      });
+    });
+  }
+  // Старые записи хранили фото прямо внутри записи. Переносим их в отдельное хранилище.
+  function migrateLegacyPhotos() {
+    if (migrationRunning) return;
+    var todo = state.data.bookings.filter(function (b) {
+      return b.photos && b.photos.length && !(b.photoIds && b.photoIds.length) && !migrating[b.id];
+    });
+    if (!todo.length) return;
+    migrationRunning = true;
+    var idx = 0;
+    function next() {
+      if (idx >= todo.length) { migrationRunning = false; return; }
+      var b = todo[idx++];
+      migrating[b.id] = true;
+      var srcs = b.photos.slice();
+      var ids = [], thumbs = [], i = 0;
+      function commit() {
+        var batch = db.batch();
+        ids.forEach(function (pid, k) {
+          batch.set(photosRef.doc(pid), { full: srcs[k], bookingId: b.id, createdAt: Date.now() });
+        });
+        batch.update(bookingsRef.doc(b.id), {
+          photoIds: ids, thumbs: thumbs, photos: firebase.firestore.FieldValue.delete()
+        });
+        batch.commit().then(next).catch(next);
+      }
+      function step() {
+        if (i >= srcs.length) { commit(); return; }
+        var src = srcs[i++];
+        makeThumbFromDataUrl(src, function (thumb) {
+          if (!thumb) { next(); return; } // не смогли обработать — оставляем как есть
+          ids.push(newPhotoId());
+          thumbs.push(thumb);
+          step();
+        });
+      }
+      step();
+    }
+    next();
   }
   function saveMasters(masters) {
     metaRef.set({ masters: masters }, { merge: true }).catch(function () {});
@@ -437,6 +554,7 @@
   // ---- Actions exposed on window for inline handlers ----
   window.__app = {
     setView: function (v) { state.view = v; render(); },
+    setStatsPeriod: function (p) { state.statsPeriod = p; render(); },
     selectDate: function (d) { state.selectedDate = d; render(); },
     setSearch: function (v) { state.search = v; render(); },
     toggleClient: function (key) { state.openClientKey = (state.openClientKey === key) ? null : key; render(); },
@@ -448,14 +566,15 @@
       var updated = Object.assign({}, b, { status: next });
       state.data.bookings = state.data.bookings.map(function (x) { return x.id === id ? updated : x; });
       render();
-      saveBookingToFirestore(updated);
+      updateBookingFields(id, { status: next });
     },
     deleteBooking: function (id) {
       var ok = window.confirm("Удалить эту запись? Это действие нельзя отменить.");
       if (!ok) return;
-      state.data.bookings = state.data.bookings.filter(function (b) { return b.id !== id; });
+      var b = state.data.bookings.filter(function (x) { return x.id === id; })[0];
+      state.data.bookings = state.data.bookings.filter(function (x) { return x.id !== id; });
       render();
-      deleteBookingFromFirestore(id);
+      if (b) deleteBookingWithPhotos(b);
     },
     newBookingForClient: function (key) {
       var list = window.__clientListForNewBooking || [];
@@ -489,22 +608,37 @@
       window.__scrollY = window.scrollY;
       var b = state.data.bookings.filter(function (x) { return x.id === id; })[0] || null;
       state.editBooking = b;
-      state.formPhotos = (b && b.photos) ? b.photos.slice() : [];
+      state.formPhotos = b ? bookingPhotoItems(b).map(function (it) {
+        return { id: it.id, thumb: it.thumb, full: it.full, needThumb: !!it.legacy };
+      }) : [];
       state.formTasks = (b && b.tasks) ? b.tasks.slice() : [];
       state.formCarOptions = [];
       state.showForm = true; render();
     },
     closeForm: function () { state.showForm = false; state.editBooking = null; render(); },
     saveForm: function () {
+      if (state.saving) return;
       var f = readForm();
       if (!f.clientName.trim() || !f.date || !f.time) return;
-      var exists = state.data.bookings.some(function (b) { return b.id === f.id; });
-      state.data.bookings = exists
-        ? state.data.bookings.map(function (b) { return b.id === f.id ? f : b; })
-        : state.data.bookings.concat([f]);
-      state.showForm = false; state.editBooking = null;
-      render();
-      saveBookingToFirestore(f);
+      var items = state.formPhotos.slice();
+      var prev = state.data.bookings.filter(function (b) { return b.id === f.id; })[0];
+      state.saving = true;
+      ensureThumbs(items, function () {
+        state.saving = false;
+        var newItems = [];
+        items.forEach(function (it) {
+          if (!it.id) { it.id = newPhotoId(); photoCache[it.id] = it.full; newItems.push(it); }
+        });
+        f.photoIds = items.map(function (it) { return it.id; });
+        f.thumbs = items.map(function (it) { return it.thumb || ""; });
+        var removed = ((prev && prev.photoIds) || []).filter(function (pid) { return f.photoIds.indexOf(pid) === -1; });
+        state.data.bookings = prev
+          ? state.data.bookings.map(function (b) { return b.id === f.id ? f : b; })
+          : state.data.bookings.concat([f]);
+        state.showForm = false; state.editBooking = null;
+        render();
+        saveBookingWithPhotos(f, newItems, removed);
+      });
     },
     pickBrand: function (b) {
       document.getElementById("f_brand").value = b;
@@ -531,9 +665,9 @@
       if (room <= 0) { renderPhotoNotice("Максимум " + MAX_PHOTOS + " фото на запись."); return; }
       files = files.slice(0, room);
       files.forEach(function (file) {
-        compressImage(file, function (dataUrl) {
-          if (dataUrl) {
-            state.formPhotos.push(dataUrl);
+        compressImage(file, function (res) {
+          if (res) {
+            state.formPhotos.push({ id: null, full: res.full, thumb: res.thumb });
             renderPhotoStrip();
           }
         });
@@ -548,8 +682,10 @@
     },
     openTicketPhoto: function (bookingId, idx) {
       var b = state.data.bookings.filter(function (x) { return x.id === bookingId; })[0];
-      if (!b || !b.photos || !b.photos[idx]) return;
-      openGallery(b.photos, idx);
+      if (!b) return;
+      var items = bookingPhotoItems(b);
+      if (!items[idx]) return;
+      openGallery(items, idx);
     },
     closeGallery: function () { closeGallery(); },
     galleryNext: function () { moveGallery(1); },
@@ -589,10 +725,11 @@
     deleteFromForm: function (id) {
       var ok = window.confirm("Удалить эту запись? Это действие нельзя отменить.");
       if (!ok) return;
+      var gone = state.data.bookings.filter(function (b) { return b.id === id; })[0];
       state.data.bookings = state.data.bookings.filter(function (b) { return b.id !== id; });
       state.showForm = false; state.editBooking = null;
       render();
-      deleteBookingFromFirestore(id);
+      if (gone) deleteBookingWithPhotos(gone);
     },
     cleanupOld: function () {
       var input = window.prompt("Удалить все записи ДО какой даты? Формат: ГГГГ-ММ-ДД", todayStr());
@@ -602,7 +739,7 @@
       if (toDelete.length === 0) { showToast("Нет записей до этой даты"); return; }
       var ok = window.confirm("Удалить " + toDelete.length + " " + (toDelete.length === 1 ? "запись" : "записей") + " до " + input + "? Это действие нельзя отменить.");
       if (!ok) return;
-      toDelete.forEach(function (b) { deleteBookingFromFirestore(b.id); });
+      toDelete.forEach(function (b) { deleteBookingWithPhotos(b); });
       state.data.bookings = state.data.bookings.filter(function (b) { return b.date >= input; });
       render();
       showToast("Удалено записей: " + toDelete.length);
@@ -610,12 +747,12 @@
   };
 
   var galleryEl = null;
-  var galleryPhotos = [];
+  var galleryItems = [];
   var galleryIndex = 0;
   var galleryTouchStartX = null;
 
-  function openGallery(photos, idx) {
-    galleryPhotos = photos;
+  function openGallery(items, idx) {
+    galleryItems = items;
     galleryIndex = idx;
     renderGallery();
   }
@@ -623,20 +760,26 @@
     if (galleryEl) { galleryEl.remove(); galleryEl = null; }
   }
   function moveGallery(dir) {
-    galleryIndex = (galleryIndex + dir + galleryPhotos.length) % galleryPhotos.length;
+    galleryIndex = (galleryIndex + dir + galleryItems.length) % galleryItems.length;
     renderGallery();
   }
   function renderGallery() {
     if (galleryEl) galleryEl.remove();
     galleryEl = document.createElement("div");
     galleryEl.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:60;display:flex;align-items:center;justify-content:center;";
-    var showNav = galleryPhotos.length > 1;
+    var showNav = galleryItems.length > 1;
+    var it = galleryItems[galleryIndex];
+    if (!it.full && it.id && photoCache[it.id]) it.full = photoCache[it.id];
+    var loading = !it.full && !it.failed;
+    var shown = it.full || it.thumb || "";
     galleryEl.innerHTML =
       '<button onclick="__app.closeGallery()" style="position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:999px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:20px;cursor:pointer;z-index:2;">✕</button>' +
       (showNav ? '<button onclick="__app.galleryPrev()" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:999px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:22px;cursor:pointer;z-index:2;">‹</button>' : '') +
       (showNav ? '<button onclick="__app.galleryNext()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:999px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:22px;cursor:pointer;z-index:2;">›</button>' : '') +
-      '<img src="' + galleryPhotos[galleryIndex] + '" style="max-width:92vw;max-height:82vh;object-fit:contain;border-radius:4px;"/>' +
-      (showNav ? '<div style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#fff;font-size:13px;opacity:0.8;">' + (galleryIndex + 1) + ' / ' + galleryPhotos.length + '</div>' : '');
+      '<img src="' + shown + '" style="max-width:92vw;max-height:82vh;object-fit:contain;border-radius:4px;' + (loading ? 'filter:blur(3px);opacity:0.8;' : '') + '"/>' +
+      (loading ? '<div style="position:absolute;top:50%;left:0;right:0;text-align:center;color:#fff;font-size:14px;margin-top:-10px;">загрузка фото…</div>' : '') +
+      (it.failed ? '<div style="position:absolute;bottom:60px;left:0;right:0;text-align:center;color:#ffb4b4;font-size:13px;">Не удалось загрузить фото — проверь соединение</div>' : '') +
+      (showNav ? '<div style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#fff;font-size:13px;opacity:0.8;">' + (galleryIndex + 1) + ' / ' + galleryItems.length + '</div>' : '');
     galleryEl.addEventListener("touchstart", function (e) { galleryTouchStartX = e.touches[0].clientX; });
     galleryEl.addEventListener("touchend", function (e) {
       if (galleryTouchStartX === null) return;
@@ -646,6 +789,33 @@
     });
     galleryEl.addEventListener("click", function (e) { if (e.target === galleryEl) closeGallery(); });
     document.body.appendChild(galleryEl);
+
+    if (loading && it.id) {
+      fetchPhoto(it.id, function (full) {
+        if (!galleryEl || galleryItems[galleryIndex] !== it) return;
+        if (full) it.full = full; else it.failed = true;
+        renderGallery();
+      });
+    }
+  }
+
+  function scaleToDataUrl(img, maxDim, quality) {
+    var w = img.width, h = img.height;
+    if (w > h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
+    else if (h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
+    var canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", quality);
+  }
+
+  function makeThumbFromDataUrl(src, cb) {
+    var img = new Image();
+    img.onload = function () {
+      try { cb(scaleToDataUrl(img, 128, 0.6)); } catch (err) { cb(null); }
+    };
+    img.onerror = function () { cb(null); };
+    img.src = src;
   }
 
   function compressImage(file, cb) {
@@ -653,16 +823,8 @@
     reader.onload = function (e) {
       var img = new Image();
       img.onload = function () {
-        var maxDim = 1000;
-        var w = img.width, h = img.height;
-        if (w > h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
-        else if (h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
-        var canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        var ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, w, h);
         try {
-          cb(canvas.toDataURL("image/jpeg", 0.6));
+          cb({ full: scaleToDataUrl(img, 1000, 0.6), thumb: scaleToDataUrl(img, 128, 0.6) });
         } catch (err) { cb(null); }
       };
       img.onerror = function () { cb(null); };
@@ -697,9 +859,9 @@
     var strip = document.getElementById("photoStrip");
     if (!strip) return;
     var html = "";
-    state.formPhotos.forEach(function (src, i) {
+    state.formPhotos.forEach(function (it, i) {
       html += '<div style="position:relative;flex-shrink:0;">' +
-        '<img src="' + src + '" onclick="__app.openPhoto(' + i + ')" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #DEE0E3;cursor:pointer;"/>' +
+        '<img src="' + (it.thumb || it.full || '') + '" onclick="__app.openPhoto(' + i + ')" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #DEE0E3;cursor:pointer;"/>' +
         '<button type="button" onclick="__app.removePhoto(' + i + ')" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:999px;border:none;background:#1B1C1F;color:#fff;font-size:12px;line-height:1;cursor:pointer;">✕</button>' +
         '</div>';
     });
@@ -725,8 +887,7 @@
       notes: g("f_notes").value,
       master: g("f_master").value,
       status: g("f_status").value,
-      tasks: state.formTasks.slice(),
-      photos: state.formPhotos.slice()
+      tasks: state.formTasks.slice()
     };
   }
 
@@ -772,9 +933,10 @@
     html += '<div class="tabs">';
     html += '<button class="tab-btn ' + (state.view === "calendar" ? "active" : "") + '" onclick="__app.setView(\'calendar\')">Календарь</button>';
     html += '<button class="tab-btn ' + (state.view === "clients" ? "active" : "") + '" onclick="__app.setView(\'clients\')">Клиенты</button>';
+    html += '<button class="tab-btn ' + (state.view === "stats" ? "active" : "") + '" onclick="__app.setView(\'stats\')">Статистика</button>';
     html += '</div></div>';
 
-    html += state.view === "calendar" ? renderCalendar() : renderClients();
+    html += state.view === "calendar" ? renderCalendar() : (state.view === "stats" ? renderStats() : renderClients());
 
     html += '<button class="fab" onclick="__app.openNewForm()">+</button>';
 
@@ -861,10 +1023,11 @@
       if (b.notes) {
         html += '<div class="ticket-service" style="color:#63676C;font-style:italic;">📝 ' + esc(b.notes) + '</div>';
       }
-      if (b.photos && b.photos.length) {
+      var pItems = bookingPhotoItems(b);
+      if (pItems.length) {
         html += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">';
-        b.photos.forEach(function (src, pi) {
-          html += '<img src="' + src + '" onclick="__app.openTicketPhoto(\'' + b.id + '\',' + pi + ')" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #E4E5E7;cursor:pointer;"/>';
+        pItems.forEach(function (it, pi) {
+          html += '<img src="' + it.thumb + '" onclick="__app.openTicketPhoto(\'' + b.id + '\',' + pi + ')" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #E4E5E7;cursor:pointer;"/>';
         });
         html += '</div>';
       }
@@ -873,6 +1036,139 @@
       html += '<button class="link-btn" style="color:#B4102E;" onclick="__app.deleteBooking(\'' + b.id + '\')">Удалить</button>';
       html += '</div></div></div>';
     });
+    html += '</div>';
+
+    html += '</div>';
+    return html;
+  }
+
+  function statsRange() {
+    var end = todayStr();
+    var days = { week: 6, month: 29, quarter: 89 }[state.statsPeriod];
+    if (days === undefined) return { start: "0000-00-00", end: end };
+    var d = new Date();
+    d.setDate(d.getDate() - days);
+    return { start: d.toISOString().slice(0, 10), end: end };
+  }
+
+  function countBy(items) {
+    var map = {};
+    items.forEach(function (k) { map[k] = (map[k] || 0) + 1; });
+    return Object.keys(map).map(function (k) { return { name: k, n: map[k] }; })
+      .sort(function (a, b) { return b.n - a.n; });
+  }
+
+  function barsHtml(rows, total, emptyText) {
+    if (!rows.length) return '<div class="stat-empty">' + emptyText + '</div>';
+    var max = rows[0].n;
+    return rows.map(function (r) {
+      var pct = Math.round(r.n * 100 / total);
+      return '<div class="bar-row"><div class="bar-label">' + esc(r.name) + '</div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(4, Math.round(r.n * 100 / max)) + '%;"></div></div>' +
+        '<div class="bar-val">' + r.n + ' <span style="font-weight:400;color:#8D9299;font-size:11px;">' + pct + '%</span></div></div>';
+    }).join("");
+  }
+
+  function renderStats() {
+    var range = statsRange();
+    var all = state.data.bookings.filter(function (b) { return b.status !== "cancelled"; });
+    var inPeriod = state.data.bookings.filter(function (b) { return b.date >= range.start && b.date <= range.end; });
+    var active = inPeriod.filter(function (b) { return b.status !== "cancelled"; });
+    var cancelled = inPeriod.length - active.length;
+    var done = active.filter(function (b) { return b.status === "done"; }).length;
+    var progress = active.filter(function (b) { return b.status === "progress"; }).length;
+
+    var html = '<div class="content">';
+    html += '<div class="period-row">';
+    [["week", "7 дней"], ["month", "30 дней"], ["quarter", "90 дней"], ["all", "Всё время"]].forEach(function (p) {
+      html += '<button class="period-btn' + (state.statsPeriod === p[0] ? ' active' : '') + '" onclick="__app.setStatsPeriod(\'' + p[0] + '\')">' + p[1] + '</button>';
+    });
+    html += '</div>';
+
+    // 1. Заезды
+    html += '<div class="stat-grid">' +
+      '<div class="stat-card"><div class="stat-num">' + active.length + '</div><div class="stat-label">Заездов</div></div>' +
+      '<div class="stat-card"><div class="stat-num" style="color:#33654C;">' + done + '</div><div class="stat-label">Выполнено</div></div>' +
+      '<div class="stat-card"><div class="stat-num" style="color:#B4102E;">' + progress + '</div><div class="stat-label">В работе</div></div>' +
+      '<div class="stat-card"><div class="stat-num" style="color:#9DA3A8;">' + cancelled + '</div><div class="stat-label">Отменено</div></div>' +
+      '</div>';
+
+    // график по дням / неделям / месяцам
+    var buckets = {};
+    var keyFn;
+    if (state.statsPeriod === "week" || state.statsPeriod === "month") {
+      keyFn = function (d) { return d; };
+    } else if (state.statsPeriod === "quarter") {
+      keyFn = function (d) {
+        var dt = new Date(d + "T00:00:00");
+        var dow = (dt.getDay() + 6) % 7;
+        dt.setDate(dt.getDate() - dow);
+        return dt.toISOString().slice(0, 10);
+      };
+    } else {
+      keyFn = function (d) { return d.slice(0, 7); };
+    }
+    active.forEach(function (b) { var k = keyFn(b.date); buckets[k] = (buckets[k] || 0) + 1; });
+    var keys = [];
+    if (state.statsPeriod === "week" || state.statsPeriod === "month") {
+      var n = state.statsPeriod === "week" ? 7 : 30;
+      for (var i = n - 1; i >= 0; i--) {
+        var dd = new Date(); dd.setDate(dd.getDate() - i);
+        keys.push(dd.toISOString().slice(0, 10));
+      }
+    } else {
+      keys = Object.keys(buckets).sort();
+    }
+    if (keys.length) {
+      var maxV = 1;
+      keys.forEach(function (k) { if ((buckets[k] || 0) > maxV) maxV = buckets[k]; });
+      html += '<div class="stat-section"><div class="stat-title">Заезды по времени</div><div class="chart">';
+      keys.forEach(function (k) {
+        var v = buckets[k] || 0;
+        html += '<div class="chart-col" title="' + esc(k) + ': ' + v + '" style="height:' + (v ? Math.max(6, Math.round(v * 100 / maxV)) : 2) + '%;' + (v ? '' : 'background:#DEE0E3;') + '"></div>';
+      });
+      html += '</div><div class="chart-axis"><span>' + esc(keys[0].slice(5)) + '</span><span>макс. ' + maxV + '</span><span>' + esc(keys[keys.length - 1].slice(5)) + '</span></div></div>';
+    }
+
+    // 2. Популярные работы
+    var taskItems = [];
+    active.forEach(function (b) { (b.tasks || []).forEach(function (t) { taskItems.push(t); }); });
+    var taskRows = countBy(taskItems).slice(0, 8);
+    html += '<div class="stat-section"><div class="stat-title">Популярные работы</div>' +
+      barsHtml(taskRows, taskItems.length || 1, 'Нет записей с отмеченными работами за период') + '</div>';
+
+    // 3. Марки
+    var brandItems = active.map(function (b) { return b.brand || "Не указана"; });
+    html += '<div class="stat-section"><div class="stat-title">Марки машин</div>' +
+      barsHtml(countBy(brandItems), brandItems.length || 1, 'Нет данных за период') + '</div>';
+
+    // 4. Новые и повторные клиенты
+    var firstSeen = {};
+    all.forEach(function (b) {
+      var key = (b.phone || b.clientName || "").toLowerCase();
+      if (!key) return;
+      if (!firstSeen[key] || b.date < firstSeen[key]) firstSeen[key] = b.date;
+    });
+    var periodClients = {};
+    active.forEach(function (b) {
+      var key = (b.phone || b.clientName || "").toLowerCase();
+      if (key) periodClients[key] = true;
+    });
+    var newC = 0, retC = 0;
+    Object.keys(periodClients).forEach(function (k) {
+      if (firstSeen[k] >= range.start) newC++; else retC++;
+    });
+    var totalC = newC + retC;
+    html += '<div class="stat-section"><div class="stat-title">Клиенты за период</div>';
+    if (!totalC) {
+      html += '<div class="stat-empty">Нет данных за период</div>';
+    } else {
+      var newPct = Math.round(newC * 100 / totalC);
+      html += '<div class="split-bar"><div style="width:' + newPct + '%;background:#B4102E;"></div><div style="flex:1;background:#1B1C1F;"></div></div>' +
+        '<div class="bar-row" style="margin-bottom:4px;"><span style="width:10px;height:10px;border-radius:999px;background:#B4102E;display:inline-block;"></span><div style="flex:1;">Новые</div><div class="bar-val">' + newC + ' <span style="font-weight:400;color:#8D9299;font-size:11px;">' + newPct + '%</span></div></div>' +
+        '<div class="bar-row" style="margin-bottom:0;"><span style="width:10px;height:10px;border-radius:999px;background:#1B1C1F;display:inline-block;"></span><div style="flex:1;">Повторные</div><div class="bar-val">' + retC + ' <span style="font-weight:400;color:#8D9299;font-size:11px;">' + (100 - newPct) + '%</span></div></div>' +
+        '<div style="margin-top:10px;font-size:12px;color:#8D9299;">Всего уникальных клиентов: ' + totalC + '</div>';
+    }
     html += '</div>';
 
     html += '</div>';
@@ -907,7 +1203,7 @@
         c.bookings.forEach(function (b) {
           var s = STATUS[b.status] || STATUS.planned;
           var taskLabel = (b.tasks && b.tasks.length) ? b.tasks.join(", ") : (b.service || "—");
-          var photoTag = (b.photos && b.photos.length) ? ' 📷' + b.photos.length : '';
+          var photoTag = bookingPhotoCount(b) ? ' 📷' + bookingPhotoCount(b) : '';
           html += '<div class="history-row" style="cursor:pointer;" onclick="__app.openEditForm(\'' + b.id + '\')"><div><span class="mono" style="color:#5C645C;">' + esc(b.date) + ' ' + esc(b.time) + '</span> ' + esc(taskLabel) + esc(photoTag) + '</div>';
           html += '<span class="status-pill" style="background:' + s.bg + ';color:' + s.color + ';">' + esc(s.label) + '</span><span style="color:#C9CCCF;margin-left:6px;">›</span></div>';
         });
